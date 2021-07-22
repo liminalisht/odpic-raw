@@ -662,7 +662,9 @@ instance Storable Data where
       (DataNumInt        v) -> libDataSetInt64  p (fromIntegral v)
       (DataNumUint       v) -> libDataSetUint64 p (fromIntegral v)
       (DataObject        v) -> libDataSetObject p v
-      (DataRowid         v) -> {#set Data -> value.asRowid  #} p v
+      (DataRowid         v) -> do
+        {#set Data -> isNull #} p 0
+        {#set Data -> value.asRowid  #} p v
       (DataStmt          v) -> libDataSetStmt   p v
       (DataTimestampD    v) -> libDataSetDouble p v
       (DataTimestampLtzD v) -> libDataSetDouble p v
@@ -683,9 +685,21 @@ instance Storable Data where
         encoding <- {#get Data -> value.asBytes.encoding #} p >>= ts
         let bytes = (ptr', fromIntegral len)
         pure $ Data_Bytes{..}
-      NativeTypeTimestamp  -> fmap (toTime o)             $ peek =<< libDataGetTimestamp p
-      NativeTypeIntervalDs -> fmap DataIntervalDs         $ peek =<< libDataGetIntervalDS p
-      NativeTypeIntervalYm -> fmap DataIntervalYm         $ peek =<< libDataGetIntervalYM p
+      NativeTypeTimestamp  -> do
+        p' <- libDataGetTimestamp p
+        if p' == nullPtr
+        then pure $ DataNull t
+        else fmap (toTime o) $ peek p'
+      NativeTypeIntervalDs -> do
+        p' <- libDataGetIntervalDS p
+        if p' == nullPtr
+        then pure $ DataNull t
+        else fmap DataIntervalDs $ peek p'
+      NativeTypeIntervalYm -> do
+        p' <- libDataGetIntervalYM p
+        if p' == nullPtr
+        then pure $ DataNull t
+        else fmap DataIntervalYm $ peek p'
       NativeTypeLob        -> fmap (getLOB o)             $ libDataGetLOB p
       NativeTypeObject     -> fmap DataObject             $ libDataGetObject p
       NativeTypeStmt       -> fmap DataStmt               $ libDataGetStmt p
@@ -729,6 +743,7 @@ getTimestamp OracleTypeTimestampTz  = DataTimestampTz
 getTimestamp _                      = DataTimestamp
 
 setBytes p Data_Bytes{..} = do
+  {#set Data -> isNull #} p 0
   let (b,bl) = bytes
   {#set Data -> value.asBytes.ptr      #} p b
   {#set Data -> value.asBytes.length   #} p (fromIntegral bl)
