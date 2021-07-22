@@ -732,7 +732,7 @@ bindValueByName
   -> IO Bool
 bindValueByName (_,p) name dv = do
   pd <- calloc
-  (ntn, _) <- newData pd dv
+  ntn <- newData pd dv
   bool <- libStmtBindValueByName p
             & inStrLen name
             & inEnum ntn
@@ -755,7 +755,7 @@ bindValueByPosition
   -> IO Bool
 bindValueByPosition (_,p) pos dv = do
   pd <- calloc
-  (ntn, _) <- newData pd dv
+  ntn <- newData pd dv
   bool <- libStmtBindValueByPos p
             & inInt pos
             & inEnum ntn
@@ -1226,7 +1226,7 @@ objectDeleteElementByIndex (_,p) pos
 setObjectAttributeValue :: PtrObject -> PtrObjectAttr -> DataValue -> IO Bool
 setObjectAttributeValue (_,p) (_,poa) v = do
   pd <- calloc
-  (ntn, _) <- newData pd v
+  ntn <- newData pd v
   bool <- libObjectSetAttributeValue p poa & inEnum ntn & inVar pd & outBool
   free pd
   pure bool
@@ -1253,7 +1253,7 @@ getObjectElementExistsByIndex (cxt,p) ind
 setObjectElementValueByIndex :: PtrObject -> Int -> DataValue -> IO Bool
 setObjectElementValueByIndex (_,p) ind v = do
   pd <- calloc
-  (ntn, _) <- newData pd v
+  ntn <- newData pd v
   bool <- libObjectSetElementValueByIndex p & inInt ind & inEnum ntn & inVar pd & outBool
   free pd
   pure bool

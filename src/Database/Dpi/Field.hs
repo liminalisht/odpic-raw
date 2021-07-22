@@ -69,13 +69,7 @@ instance FromDataField ByteString where
   fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
     where
       go _ _ (DataNull          _) = return Nothing
-      go _ _ (DataChar          v) = Just <$> toByteString v
-      go _ _ (DataLongRaw       v) = Just <$> toByteString v
-      go _ _ (DataLongVarchar   v) = Just <$> toByteString v
-      go _ _ (DataNVarchar      v) = Just <$> toByteString v
-      go _ _ (DataRaw           v) = Just <$> toByteString v
-      go _ _ (DataVarchar       v) = Just <$> toByteString v
-      go _ _ (DataNChar         v) = Just <$> toByteString v
+      go _ _ (DataBytes         v) = Just <$> toByteString v
       go n _ _                     = singleError' n
 
 instance FromDataField Integer where
@@ -110,7 +104,7 @@ instance FromDataField Scientific where
       go _ _ (DataFloat         v) = return . Just $ realToFrac v
       go _ _ (DataNumDouble     v) = return . Just $ realToFrac v
       go _ _ (DataDouble        v) = return . Just $ realToFrac v
-      go _ _ (DataNumBytes Data_Bytes{..}) = (Just . read . BC.unpack) <$> tsLen bytes
+      go _ _ (DataBytes Data_Bytes{..}) = (Just . read . BC.unpack) <$> tsLen bytes
       go n _ _                     = singleError' n
 
 instance FromDataField Bool where
@@ -168,14 +162,14 @@ class ToDataField a where
   toDataField :: a -> NativeTypeNum -> OracleTypeNum -> IO DataValue
 
 instance ToDataField ByteString where
-  toDataField v NativeTypeBytes OracleTypeChar        = DataChar        <$> fromByteString v
-  toDataField v NativeTypeBytes OracleTypeLongRaw     = DataLongRaw     <$> fromByteString v
-  toDataField v NativeTypeBytes OracleTypeLongVarchar = DataLongVarchar <$> fromByteString v
-  toDataField v NativeTypeBytes OracleTypeNchar       = DataNChar       <$> fromByteString v
-  toDataField v NativeTypeBytes OracleTypeNumber      = DataNumBytes    <$> fromByteString v
-  toDataField v NativeTypeBytes OracleTypeNvarchar    = DataNVarchar    <$> fromByteString v
-  toDataField v NativeTypeBytes OracleTypeRaw         = DataRaw         <$> fromByteString v
-  toDataField v NativeTypeBytes OracleTypeVarchar     = DataVarchar     <$> fromByteString v
+  toDataField v NativeTypeBytes OracleTypeChar        = fmap DataBytes $ fromByteString v
+  toDataField v NativeTypeBytes OracleTypeLongRaw     = fmap DataBytes $ fromByteString v
+  toDataField v NativeTypeBytes OracleTypeLongVarchar = fmap DataBytes $ fromByteString v
+  toDataField v NativeTypeBytes OracleTypeNchar       = fmap DataBytes $ fromByteString v
+  toDataField v NativeTypeBytes OracleTypeNumber      = fmap DataBytes $ fromByteString v
+  toDataField v NativeTypeBytes OracleTypeNvarchar    = fmap DataBytes $ fromByteString v
+  toDataField v NativeTypeBytes OracleTypeRaw         = fmap DataBytes $ fromByteString v
+  toDataField v NativeTypeBytes OracleTypeVarchar     = fmap DataBytes $ fromByteString v
   toDataField _ _               _                     = singleError     "Text"
 
 instance ToDataField Bool where
@@ -364,15 +358,8 @@ instance FromDataFields String where
       go2 v (DataUint          _) = go3 (fromDataField v :: IO (Maybe Integer)    )
       go2 v (DataDouble        _) = go3 (fromDataField v :: IO (Maybe Double)     )
       go2 v (DataNumDouble     _) = go3 (fromDataField v :: IO (Maybe Double)     )
-      go2 v (DataNumBytes      _) = go3 (fromDataField v :: IO (Maybe Double)     )
       go2 v (DataFloat         _) = go3 (fromDataField v :: IO (Maybe Float)      )
-      go2 v (DataChar          _) = go3 (fromDataField v :: IO (Maybe ByteString) )
-      go2 v (DataLongRaw       _) = go3 (fromDataField v :: IO (Maybe ByteString) )
-      go2 v (DataLongVarchar   _) = go3 (fromDataField v :: IO (Maybe ByteString) )
-      go2 v (DataNChar         _) = go3 (fromDataField v :: IO (Maybe ByteString) )
-      go2 v (DataNVarchar      _) = go3 (fromDataField v :: IO (Maybe ByteString) )
-      go2 v (DataRaw           _) = go3 (fromDataField v :: IO (Maybe ByteString) )
-      go2 v (DataVarchar       _) = go3 (fromDataField v :: IO (Maybe ByteString) )
+      go2 v (DataBytes         _) = go3 (fromDataField v :: IO (Maybe ByteString) )
       go2 v (DataIntervalDs    _) = go3 (fromDataField v :: IO (Maybe DiffTime)   )
       go2 v (DataIntervalYm    _) = go3 (fromDataField v :: IO (Maybe DiffTime)   )
       go2 v (DataTimestampD    _) = go3 (fromDataField v :: IO (Maybe UTCTime)    )
@@ -383,4 +370,3 @@ instance FromDataFields String where
       go2 v (DataTimestampLtz  _) = go3 (fromDataField v :: IO (Maybe ZonedTime)  )
       go2 v (DataTimestampTz   _) = go3 (fromDataField v :: IO (Maybe ZonedTime)  )
       go2 _ _                     = return ""
-

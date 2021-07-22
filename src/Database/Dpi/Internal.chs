@@ -546,26 +546,19 @@ data DataValue
   | DataBFile          !(Ptr DPI_Lob)
   | DataBoolean        !Bool
   | DataBlob           !(Ptr DPI_Lob)
-  | DataChar           !Data_Bytes
   | DataClob           !(Ptr DPI_Lob)
   | DataDate           !Data_Timestamp
   | DataIntervalDs     !Data_IntervalDS
   | DataIntervalYm     !Data_IntervalYM
-  | DataLongRaw        !Data_Bytes
-  | DataLongVarchar    !Data_Bytes
   | DataDouble         !CDouble
   | DataFloat          !CFloat
   | DataInt            !Int64
   | DataUint           !Word64
-  | DataNChar          !Data_Bytes
   | DataNClob          !(Ptr DPI_Lob)
   | DataNumDouble      !Scientific
-  | DataNumBytes       !Data_Bytes
   | DataNumInt         !Int64
   | DataNumUint        !Word64
-  | DataNVarchar       !Data_Bytes
   | DataObject         !(Ptr DPI_Object)
-  | DataRaw            !Data_Bytes
   | DataRowid          !(Ptr DPI_Rowid)
   | DataStmt           !(Ptr DPI_Stmt)
   | DataTimestamp      !Data_Timestamp
@@ -574,50 +567,42 @@ data DataValue
   | DataTimestampLtzD  !CDouble
   | DataTimestampTz    !Data_Timestamp
   | DataTimestampTzD   !CDouble
-  | DataVarchar        !Data_Bytes
+  | DataBytes          !Data_Bytes
   deriving Show
 
 {-# INLINE newData #-}
-newData :: PtrData -> DataValue -> IO (NativeTypeNum, OracleTypeNum)
+newData :: PtrData -> DataValue -> IO NativeTypeNum
 newData pd d = do
-  let (tp,ot) = go d
   poke pd (Data $ \_ _ -> pure d)
-  pure (tp, ot)
+  pure $ go d
   where
     {-# INLINE go #-}
-    go (DataNull          t) = (t,                    OracleTypeBoolean      )
-    go (DataBFile         _) = (NativeTypeLob,        OracleTypeBfile        )
-    go (DataBoolean       _) = (NativeTypeBoolean,    OracleTypeBoolean      )
-    go (DataBlob          _) = (NativeTypeLob,        OracleTypeBlob         )
-    go (DataChar          _) = (NativeTypeBytes,      OracleTypeChar         )
-    go (DataClob          _) = (NativeTypeLob,        OracleTypeClob         )
-    go (DataDate          _) = (NativeTypeTimestamp,  OracleTypeDate         )
-    go (DataIntervalDs    _) = (NativeTypeIntervalDs, OracleTypeIntervalDs   )
-    go (DataIntervalYm    _) = (NativeTypeIntervalYm, OracleTypeIntervalYm   )
-    go (DataLongRaw       _) = (NativeTypeBytes,      OracleTypeLongRaw      )
-    go (DataLongVarchar   _) = (NativeTypeBytes,      OracleTypeLongVarchar  )
-    go (DataDouble        _) = (NativeTypeDouble,     OracleTypeNativeDouble )
-    go (DataFloat         _) = (NativeTypeFloat,      OracleTypeNativeFloat  )
-    go (DataInt           _) = (NativeTypeInt64,      OracleTypeNativeInt    )
-    go (DataUint          _) = (NativeTypeUint64,     OracleTypeNativeUint   )
-    go (DataNChar         _) = (NativeTypeBytes,      OracleTypeNchar        )
-    go (DataNClob         _) = (NativeTypeLob,        OracleTypeNclob        )
-    go (DataNumDouble     _) = (NativeTypeDouble,     OracleTypeNumber       )
-    go (DataNumBytes      _) = (NativeTypeBytes,      OracleTypeNumber       )
-    go (DataNumInt        _) = (NativeTypeInt64,      OracleTypeNumber       )
-    go (DataNumUint       _) = (NativeTypeUint64,     OracleTypeNumber       )
-    go (DataNVarchar      _) = (NativeTypeBytes,      OracleTypeNvarchar     )
-    go (DataObject        _) = (NativeTypeObject,     OracleTypeObject       )
-    go (DataRaw           _) = (NativeTypeBytes,      OracleTypeRaw          )
-    go (DataRowid         _) = (NativeTypeRowid,      OracleTypeRowid        )
-    go (DataStmt          _) = (NativeTypeStmt,       OracleTypeStmt         )
-    go (DataTimestamp     _) = (NativeTypeTimestamp,  OracleTypeTimestamp    )
-    go (DataTimestampD    _) = (NativeTypeDouble,     OracleTypeTimestamp    )
-    go (DataTimestampLtz  _) = (NativeTypeTimestamp,  OracleTypeTimestampLtz )
-    go (DataTimestampLtzD _) = (NativeTypeDouble,     OracleTypeTimestampLtz )
-    go (DataTimestampTz   _) = (NativeTypeTimestamp,  OracleTypeTimestampTz  )
-    go (DataTimestampTzD  _) = (NativeTypeDouble,     OracleTypeTimestampTz  )
-    go (DataVarchar       _) = (NativeTypeBytes,      OracleTypeVarchar      )
+    go (DataNull          t) = t
+    go (DataBFile         _) = NativeTypeLob
+    go (DataBoolean       _) = NativeTypeBoolean
+    go (DataBlob          _) = NativeTypeLob
+    go (DataClob          _) = NativeTypeLob
+    go (DataDate          _) = NativeTypeTimestamp
+    go (DataIntervalDs    _) = NativeTypeIntervalDs
+    go (DataIntervalYm    _) = NativeTypeIntervalYm
+    go (DataDouble        _) = NativeTypeDouble
+    go (DataFloat         _) = NativeTypeFloat
+    go (DataInt           _) = NativeTypeInt64
+    go (DataUint          _) = NativeTypeUint64
+    go (DataNClob         _) = NativeTypeLob
+    go (DataNumDouble     _) = NativeTypeDouble
+    go (DataNumInt        _) = NativeTypeInt64
+    go (DataNumUint       _) = NativeTypeUint64
+    go (DataObject        _) = NativeTypeObject
+    go (DataRowid         _) = NativeTypeRowid
+    go (DataStmt          _) = NativeTypeStmt
+    go (DataTimestamp     _) = NativeTypeTimestamp
+    go (DataTimestampD    _) = NativeTypeDouble
+    go (DataTimestampLtz  _) = NativeTypeTimestamp
+    go (DataTimestampLtzD _) = NativeTypeDouble
+    go (DataTimestampTz   _) = NativeTypeTimestamp
+    go (DataTimestampTzD  _) = NativeTypeDouble
+    go (DataBytes         _) = NativeTypeBytes
 
 newtype Data = Data (NativeTypeNum -> OracleTypeNum -> IO DataValue)
 
@@ -638,14 +623,7 @@ instance Storable Data where
           (fromIntegral seconds)
           (fromIntegral fseconds)
       (DataIntervalYm  Data_IntervalYM {..}) -> libDataSetIntervalYM p years months
-      (DataChar          v) -> setBytes p v
-      (DataLongRaw       v) -> setBytes p v
-      (DataLongVarchar   v) -> setBytes p v
-      (DataNChar         v) -> setBytes p v
-      (DataNumBytes      v) -> setBytes p v
-      (DataNVarchar      v) -> setBytes p v
-      (DataVarchar       v) -> setBytes p v
-      (DataRaw           v) -> setBytes p v
+      (DataBytes         v) -> setBytes p v
       (DataTimestamp     v) -> setTimestamp p v
       (DataTimestampLtz  v) -> setTimestamp p v
       (DataTimestampTz   v) -> setTimestamp p v
@@ -705,15 +683,16 @@ instance Storable Data where
       NativeTypeStmt       -> fmap DataStmt               $ libDataGetStmt p
       NativeTypeRowid      -> fmap DataRowid              $ {#get Data -> value.asRowid  #} p
 
-getBytes     OracleTypeChar         = DataChar
-getBytes     OracleTypeLongRaw      = DataLongRaw
-getBytes     OracleTypeLongVarchar  = DataLongVarchar
-getBytes     OracleTypeNchar        = DataNChar
-getBytes     OracleTypeNumber       = DataNumBytes
-getBytes     OracleTypeNvarchar     = DataNVarchar
-getBytes     OracleTypeRaw          = DataRaw
-getBytes     OracleTypeVarchar      = DataVarchar
-getBytes     _                      = DataVarchar
+-- getBytes     OracleTypeChar         = DataChar
+-- getBytes     OracleTypeLongRaw      = DataLongRaw
+-- getBytes     OracleTypeLongVarchar  = DataLongVarchar
+-- getBytes     OracleTypeNchar        = DataNChar
+-- getBytes     OracleTypeNumber       = DataNumBytes
+-- getBytes     OracleTypeNvarchar     = DataNVarchar
+-- getBytes     OracleTypeRaw          = DataRaw
+-- getBytes     OracleTypeVarchar      = DataVarchar
+-- getBytes     _                      = DataVarchar
+getBytes _ = DataBytes
 
 getInt64     OracleTypeNumber       = DataNumInt
 getInt64     OracleTypeNativeInt    = DataInt
