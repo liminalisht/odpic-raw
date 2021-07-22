@@ -549,10 +549,8 @@ data DataValue
   | DataIntervalDs     !Data_IntervalDS
   | DataIntervalYm     !Data_IntervalYM
   | DataFloat          !CFloat
-  | DataUint           !Word64
   | DataNClob          !(Ptr DPI_Lob)
   | DataNumDouble      !Scientific
-  | DataNumUint        !Word64
   | DataObject         !(Ptr DPI_Object)
   | DataRowid          !(Ptr DPI_Rowid)
   | DataStmt           !(Ptr DPI_Stmt)
@@ -560,8 +558,9 @@ data DataValue
   | DataBoolean        !Bool
   | DataBytes          !Data_Bytes
   | DataDouble         !CDouble
-  | DataTimestamp      !Data_Timestamp
   | DataInt            !Int64
+  | DataTimestamp      !Data_Timestamp
+  | DataUint           !Word64
   deriving Show
 
 {-# INLINE newData #-}
@@ -578,10 +577,8 @@ newData pd d = do
     go (DataIntervalDs    _) = NativeTypeIntervalDs
     go (DataIntervalYm    _) = NativeTypeIntervalYm
     go (DataFloat         _) = NativeTypeFloat
-    go (DataUint          _) = NativeTypeUint64
     go (DataNClob         _) = NativeTypeLob
     go (DataNumDouble     _) = NativeTypeDouble
-    go (DataNumUint       _) = NativeTypeUint64
     go (DataObject        _) = NativeTypeObject
     go (DataRowid         _) = NativeTypeRowid
     go (DataStmt          _) = NativeTypeStmt
@@ -591,6 +588,7 @@ newData pd d = do
     go (DataDouble        _) = NativeTypeDouble
     go (DataInt           _) = NativeTypeInt64
     go (DataTimestamp     _) = NativeTypeTimestamp
+    go (DataUint          _) = NativeTypeUint64
 
 newtype Data = Data (NativeTypeNum -> OracleTypeNum -> IO DataValue)
 
@@ -622,7 +620,6 @@ instance Storable Data where
       (DataInt           v) -> libDataSetInt64  p (fromIntegral v)
       (DataUint          v) -> libDataSetUint64 p (fromIntegral v)
       (DataNumDouble     v) -> libDataSetDouble p (realToFrac v)
-      (DataNumUint       v) -> libDataSetUint64 p (fromIntegral v)
       (DataObject        v) -> libDataSetObject p v
       (DataRowid         v) -> do
         {#set Data -> isNull #} p 0
@@ -666,9 +663,6 @@ instance Storable Data where
 
 
 
-getUInt64    OracleTypeNumber       = DataNumUint
-getUInt64    OracleTypeNativeUint   = DataUint
-getUInt64    _                      = DataUint
 
 
 getLOB       OracleTypeBfile        = DataBFile
@@ -681,7 +675,8 @@ getBytes     _ = DataBytes
 getDouble    OracleTypeNumber       = DataNumDouble . realToFrac
 getDouble    _                      = DataDouble
 getInt64     _                      = DataInt
-getTimestamp _ = DataTimestamp
+getTimestamp _                      = DataTimestamp
+getUInt64    _                      = DataUint
 
 
 setBytes p Data_Bytes{..} = do

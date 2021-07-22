@@ -96,9 +96,8 @@ instance FromDataField Scientific where
   fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
     where
       go _ _ (DataNull          _) = return Nothing
-      go _ _ (DataInt           v) = return . Just $ realToFrac v
-      go _ _ (DataUint          v) = return . Just $ realToFrac v
-      go _ _ (DataNumUint       v) = return . Just $ realToFrac v
+      go _ _ (DataInt           v) = pure . Just $ realToFrac v
+      go _ _ (DataUint          v) = pure . Just $ realToFrac v
       go _ _ (DataFloat         v) = return . Just $ realToFrac v
       go _ _ (DataNumDouble     v) = return . Just $ realToFrac v
       go _ _ (DataDouble        v) = return . Just $ realToFrac v
@@ -176,8 +175,8 @@ instance ToDataField Integer where
   toDataField v NativeTypeFloat  OracleTypeNativeFloat  = return $ DataFloat     $ realToFrac v
   toDataField v NativeTypeInt64  OracleTypeNativeInt    = pure   $ DataInt       $ fromIntegral v
   toDataField v NativeTypeInt64  OracleTypeNumber       = pure   $ DataInt       $ fromIntegral v
-  toDataField v NativeTypeUint64 OracleTypeNativeUint   = return $ DataUint      $ fromIntegral v
-  toDataField v NativeTypeUint64 OracleTypeNumber       = return $ DataNumUint   $ fromIntegral v
+  toDataField v NativeTypeUint64 OracleTypeNativeUint   = pure   $ DataUint      $ fromIntegral v
+  toDataField v NativeTypeUint64 OracleTypeNumber       = pure   $ DataUint   $ fromIntegral v
   toDataField _ _                 _                     = singleError "Integer"
 
 instance ToDataField Int where
@@ -198,8 +197,8 @@ instance ToDataField Scientific where
   toDataField v NativeTypeFloat  OracleTypeNativeFloat  = return $ DataFloat     $ realToFrac v
   toDataField v NativeTypeInt64  OracleTypeNativeInt    = pure   $ DataInt       $ round v
   toDataField v NativeTypeInt64  OracleTypeNumber       = pure   $ DataInt       $ round v
-  toDataField v NativeTypeUint64 OracleTypeNativeUint   = return $ DataUint      $ round v
-  toDataField v NativeTypeUint64 OracleTypeNumber       = return $ DataNumUint   $ round v
+  toDataField v NativeTypeUint64 OracleTypeNativeUint   = pure   $ DataUint      $ round v
+  toDataField v NativeTypeUint64 OracleTypeNumber       = pure   $ DataUint   $ round v
   toDataField _ _                 _                     = singleError "Decimal"
 
 instance ToDataField Double where
@@ -208,8 +207,8 @@ instance ToDataField Double where
   toDataField v NativeTypeFloat  OracleTypeNativeFloat  = return $ DataFloat     $ realToFrac v
   toDataField v NativeTypeInt64  OracleTypeNativeInt    = pure   $ DataInt       $ round v
   toDataField v NativeTypeInt64  OracleTypeNumber       = pure   $ DataInt       $ round v
-  toDataField v NativeTypeUint64 OracleTypeNativeUint   = return $ DataUint      $ round v
-  toDataField v NativeTypeUint64 OracleTypeNumber       = return $ DataNumUint   $ round v
+  toDataField v NativeTypeUint64 OracleTypeNativeUint   = pure   $ DataUint      $ round v
+  toDataField v NativeTypeUint64 OracleTypeNumber       = pure   $ DataUint   $ round v
   toDataField _ _                 _                     = singleError "Double"
 
 instance ToDataField Float where
