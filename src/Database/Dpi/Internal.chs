@@ -547,7 +547,6 @@ data DataValue
   | DataBoolean        !Bool
   | DataBlob           !(Ptr DPI_Lob)
   | DataClob           !(Ptr DPI_Lob)
-  | DataDate           !Data_Timestamp
   | DataIntervalDs     !Data_IntervalDS
   | DataIntervalYm     !Data_IntervalYM
   | DataDouble         !CDouble
@@ -561,13 +560,11 @@ data DataValue
   | DataObject         !(Ptr DPI_Object)
   | DataRowid          !(Ptr DPI_Rowid)
   | DataStmt           !(Ptr DPI_Stmt)
-  | DataTimestamp      !Data_Timestamp
   | DataTimestampD     !CDouble
-  | DataTimestampLtz   !Data_Timestamp
   | DataTimestampLtzD  !CDouble
-  | DataTimestampTz    !Data_Timestamp
   | DataTimestampTzD   !CDouble
   | DataBytes          !Data_Bytes
+  | DataTimestamp      !Data_Timestamp
   deriving Show
 
 {-# INLINE newData #-}
@@ -582,7 +579,6 @@ newData pd d = do
     go (DataBoolean       _) = NativeTypeBoolean
     go (DataBlob          _) = NativeTypeLob
     go (DataClob          _) = NativeTypeLob
-    go (DataDate          _) = NativeTypeTimestamp
     go (DataIntervalDs    _) = NativeTypeIntervalDs
     go (DataIntervalYm    _) = NativeTypeIntervalYm
     go (DataDouble        _) = NativeTypeDouble
@@ -596,13 +592,11 @@ newData pd d = do
     go (DataObject        _) = NativeTypeObject
     go (DataRowid         _) = NativeTypeRowid
     go (DataStmt          _) = NativeTypeStmt
-    go (DataTimestamp     _) = NativeTypeTimestamp
     go (DataTimestampD    _) = NativeTypeDouble
-    go (DataTimestampLtz  _) = NativeTypeTimestamp
     go (DataTimestampLtzD _) = NativeTypeDouble
-    go (DataTimestampTz   _) = NativeTypeTimestamp
     go (DataTimestampTzD  _) = NativeTypeDouble
     go (DataBytes         _) = NativeTypeBytes
+    go (DataTimestamp     _) = NativeTypeTimestamp
 
 newtype Data = Data (NativeTypeNum -> OracleTypeNum -> IO DataValue)
 
@@ -625,9 +619,6 @@ instance Storable Data where
       (DataIntervalYm  Data_IntervalYM {..}) -> libDataSetIntervalYM p years months
       (DataBytes         v) -> setBytes p v
       (DataTimestamp     v) -> setTimestamp p v
-      (DataTimestampLtz  v) -> setTimestamp p v
-      (DataTimestampTz   v) -> setTimestamp p v
-      (DataDate          v) -> setTimestamp p v
       (DataBFile         v) -> libDataSetLOB p v
       (DataNClob         v) -> libDataSetLOB p v
       (DataBlob          v) -> libDataSetLOB p v
@@ -667,7 +658,7 @@ instance Storable Data where
         p' <- libDataGetTimestamp p
         if p' == nullPtr
         then pure $ DataNull t
-        else fmap (toTime o) $ peek p'
+        else fmap DataTimestamp $ peek p'
       NativeTypeIntervalDs -> do
         p' <- libDataGetIntervalDS p
         if p' == nullPtr
@@ -683,15 +674,6 @@ instance Storable Data where
       NativeTypeStmt       -> fmap DataStmt               $ libDataGetStmt p
       NativeTypeRowid      -> fmap DataRowid              $ {#get Data -> value.asRowid  #} p
 
--- getBytes     OracleTypeChar         = DataChar
--- getBytes     OracleTypeLongRaw      = DataLongRaw
--- getBytes     OracleTypeLongVarchar  = DataLongVarchar
--- getBytes     OracleTypeNchar        = DataNChar
--- getBytes     OracleTypeNumber       = DataNumBytes
--- getBytes     OracleTypeNvarchar     = DataNVarchar
--- getBytes     OracleTypeRaw          = DataRaw
--- getBytes     OracleTypeVarchar      = DataVarchar
--- getBytes     _                      = DataVarchar
 getBytes _ = DataBytes
 
 getInt64     OracleTypeNumber       = DataNumInt
@@ -715,11 +697,8 @@ getLOB       OracleTypeClob         = DataClob
 getLOB       OracleTypeNclob        = DataNClob
 getLOB       _                      = DataBlob
 
-getTimestamp OracleTypeDate         = DataDate
-getTimestamp OracleTypeTimestamp    = DataTimestamp
-getTimestamp OracleTypeTimestampLtz = DataTimestampLtz
-getTimestamp OracleTypeTimestampTz  = DataTimestampTz
-getTimestamp _                      = DataTimestamp
+getTimestamp _ = DataTimestamp
+
 
 setBytes p Data_Bytes{..} = do
   {#set Data -> isNull #} p 0
@@ -770,17 +749,6 @@ instance Storable Data_DataTypeInfo where
     fsPrecision          <-        {#get DataTypeInfo -> fsPrecision          #} p
     objectType           <-        {#get DataTypeInfo -> objectType           #} p
     return Data_DataTypeInfo {..}
-
-{-# INLINE toTime #-}
-toTime :: OracleTypeNum -> Data_Timestamp -> DataValue
-toTime t v
-  = let go OracleTypeDate         = DataDate
-        go OracleTypeTimestamp    = DataTimestamp
-        go OracleTypeTimestampLtz = DataTimestampLtz
-        go OracleTypeTimestampTz  = DataTimestampTz
-        go _                      = DataTimestamp
-    in go t v
-
 
 data Data_EncodingInfo  = Data_EncodingInfo
   { encoding              :: !ByteString
@@ -996,7 +964,7 @@ instance Storable Data_ShardingKeyColumn where
         encoding <- {#get ShardingKeyColumn -> value.asBytes.encoding #} p >>= ts
         let bytes = (ptr', fromIntegral len)
         return Data_Bytes{..}
-      go p NativeTypeTimestamp  t = do
+      go p NativeTypeTimestamp  _ = do
         year           <- {#get ShardingKeyColumn -> value.asTimestamp.year           #} p
         month          <- {#get ShardingKeyColumn -> value.asTimestamp.month          #} p
         day            <- {#get ShardingKeyColumn -> value.asTimestamp.day            #} p
@@ -1006,7 +974,7 @@ instance Storable Data_ShardingKeyColumn where
         fsecond        <- {#get ShardingKeyColumn -> value.asTimestamp.fsecond        #} p
         tzHourOffset   <- {#get ShardingKeyColumn -> value.asTimestamp.tzHourOffset   #} p
         tzMinuteOffset <- {#get ShardingKeyColumn -> value.asTimestamp.tzMinuteOffset #} p
-        return $ toTime t Data_Timestamp{..}
+        return $ DataTimestamp $ Data_Timestamp{..}
       go p NativeTypeIntervalDs _ = DataIntervalDs <$> do
         days     <- {#get ShardingKeyColumn -> value.asIntervalDS.days     #} p
         hours    <- {#get ShardingKeyColumn -> value.asIntervalDS.hours    #} p

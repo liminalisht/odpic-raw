@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE TupleSections        #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 module Database.Dpi.Field(
     DataField(..)
@@ -18,6 +19,7 @@ module Database.Dpi.Field(
   ) where
 
 import           Database.Dpi.Internal
+import           Database.Dpi.Internal as I (Data_DataTypeInfo(oracleTypeNum))
 import           Database.Dpi.Prelude
 import           Database.Dpi.Util
 
@@ -115,32 +117,34 @@ instance FromDataField Bool where
       go n _ _                     = singleError' n
 
 instance FromDataField UTCTime where
-  fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
-    where
-      go _ _ (DataNull          _) = return Nothing
-      go _ _ (DataDate          v) = return . Just $ toUTCTime  v
-      go _ _ (DataTimestamp     v) = return . Just $ toUTCTime  v
-      go _ _ (DataTimestampLtz  v) = return . Just $ toUTCTimeL v
-      go _ _ (DataTimestampTz   v) = return . Just $ toUTCTime  v
-      go _ _ (DataTimestampD    v) = return . Just $ toUTCTimeD v
-      go _ _ (DataTimestampLtzD v) = return . Just $ toUTCTimeD v
-      go _ _ (DataTimestampTzD  v) = return . Just $ toUTCTimeD v
-      go n _ _                     = singleError' n
+  fromDataField DataField{..} =
+    let Data_QueryInfo{..} = info
+    in case (value, I.oracleTypeNum typeInfo) of
+      (DataNull          _,                      _) -> pure Nothing
+      (DataTimestamp     v,         OracleTypeDate) -> pure . Just $ toUTCTime  v
+      (DataTimestamp     v,    OracleTypeTimestamp) -> pure . Just $ toUTCTime  v
+      (DataTimestamp     v, OracleTypeTimestampLtz) -> pure . Just $ toUTCTimeL v
+      (DataTimestamp     v,  OracleTypeTimestampTz) -> pure . Just $ toUTCTime  v
+      (DataTimestampD    v, _) -> return . Just $ toUTCTimeD v
+      (DataTimestampLtzD v, _) -> return . Just $ toUTCTimeD v
+      (DataTimestampTzD  v, _) -> return . Just $ toUTCTimeD v
+      _                        -> singleError' name
       -- go _ _ (DataIntervalDs    v) = !Data_IntervalDS
       -- go _ _ (DataIntervalYm    v) = !Data_IntervalYM
 
 instance FromDataField ZonedTime where
-  fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
-    where
-      go _ _ (DataNull          _) = return Nothing
-      go _ _ (DataDate          v) = return . Just $ toZonedTime False v
-      go _ _ (DataTimestamp     v) = return . Just $ toZonedTime False v
-      go _ _ (DataTimestampLtz  v) = return . Just $ toZonedTime True  v
-      go _ _ (DataTimestampTz   v) = return . Just $ toZonedTime False v
-      go _ _ (DataTimestampD    v) = return . Just $ utcToZonedTime utc $ toUTCTimeD v
-      go _ _ (DataTimestampLtzD v) = return . Just $ utcToZonedTime utc $ toUTCTimeD v
-      go _ _ (DataTimestampTzD  v) = return . Just $ utcToZonedTime utc $ toUTCTimeD v
-      go n _ _                     = singleError' n
+  fromDataField DataField{..} =
+    let Data_QueryInfo{..} = info
+    in case (value, I.oracleTypeNum typeInfo) of
+      (DataNull          _,                      _) -> pure Nothing
+      (DataTimestamp     v,         OracleTypeDate) -> pure . Just $ toZonedTime False v
+      (DataTimestamp     v,    OracleTypeTimestamp) -> pure . Just $ toZonedTime False v
+      (DataTimestamp     v, OracleTypeTimestampLtz) -> pure . Just $ toZonedTime True  v
+      (DataTimestamp     v,  OracleTypeTimestampTz) -> pure . Just $ toZonedTime False v
+      (DataTimestampD    v, _) -> return . Just $ utcToZonedTime utc $ toUTCTimeD v
+      (DataTimestampLtzD v, _) -> return . Just $ utcToZonedTime utc $ toUTCTimeD v
+      (DataTimestampTzD  v, _) -> return . Just $ utcToZonedTime utc $ toUTCTimeD v
+      _                        -> singleError' name
       -- go _ _ (DataIntervalDs    v) = !Data_IntervalDS
       -- go _ _ (DataIntervalYm    v) = !Data_IntervalYM
 
@@ -222,23 +226,23 @@ instance ToDataField Float where
   toDataField v = toDataField (realToFrac v :: Double)
 
 instance ToDataField UTCTime where
-  toDataField v NativeTypeTimestamp OracleTypeDate         = return $ DataDate          $ fromUTCTime  v
+  toDataField v NativeTypeTimestamp OracleTypeDate         = return $ DataTimestamp     $ fromUTCTime  v
   toDataField v NativeTypeDouble    OracleTypeTimestamp    = return $ DataTimestampD    $ fromUTCTimeD v
   toDataField v NativeTypeDouble    OracleTypeTimestampLtz = return $ DataTimestampLtzD $ fromUTCTimeD v
   toDataField v NativeTypeDouble    OracleTypeTimestampTz  = return $ DataTimestampTzD  $ fromUTCTimeD v
   toDataField v NativeTypeTimestamp OracleTypeTimestamp    = return $ DataTimestamp     $ fromUTCTime  v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = return $ DataTimestampLtz  $ fromUTCTime  v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = return $ DataTimestampTz   $ fromUTCTime  v
+  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = return $ DataTimestamp     $ fromUTCTime  v
+  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = return $ DataTimestamp     $ fromUTCTime  v
   toDataField _ _                 _                        = singleError "UTCTime"
 
 instance ToDataField ZonedTime where
-  toDataField v NativeTypeTimestamp OracleTypeDate         = return $ DataDate          $ fromZonedTime v
+  toDataField v NativeTypeTimestamp OracleTypeDate         = return $ DataTimestamp     $ fromZonedTime v
   -- toDataField v NativeTypeDouble    OracleTypeTimestamp    = return $ DataTimestampD    $ fromUTCTimeD  v
   -- toDataField v NativeTypeDouble    OracleTypeTimestampLtz = return $ DataTimestampLtzD $ fromUTCTimeD  v
   -- toDataField v NativeTypeDouble    OracleTypeTimestampTz  = return $ DataTimestampTzD  $ fromUTCTimeD  v
   toDataField v NativeTypeTimestamp OracleTypeTimestamp    = return $ DataTimestamp     $ fromZonedTime v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = return $ DataTimestampLtz  $ fromZonedTime v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = return $ DataTimestampTz   $ fromZonedTime v
+  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = return $ DataTimestamp     $ fromZonedTime v
+  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = return $ DataTimestamp     $ fromZonedTime v
   toDataField _ _                 _                        = singleError "ZonedTime"
 
 instance ToDataField DiffTime where
@@ -359,14 +363,10 @@ instance FromDataFields String where
       go2 v (DataDouble        _) = go3 (fromDataField v :: IO (Maybe Double)     )
       go2 v (DataNumDouble     _) = go3 (fromDataField v :: IO (Maybe Double)     )
       go2 v (DataFloat         _) = go3 (fromDataField v :: IO (Maybe Float)      )
-      go2 v (DataBytes         _) = go3 (fromDataField v :: IO (Maybe ByteString) )
       go2 v (DataIntervalDs    _) = go3 (fromDataField v :: IO (Maybe DiffTime)   )
       go2 v (DataIntervalYm    _) = go3 (fromDataField v :: IO (Maybe DiffTime)   )
-      go2 v (DataTimestampD    _) = go3 (fromDataField v :: IO (Maybe UTCTime)    )
       go2 v (DataTimestampLtzD _) = go3 (fromDataField v :: IO (Maybe ZonedTime)  )
       go2 v (DataTimestampTzD  _) = go3 (fromDataField v :: IO (Maybe ZonedTime)  )
-      go2 v (DataDate          _) = go3 (fromDataField v :: IO (Maybe UTCTime)    )
+      go2 v (DataBytes         _) = go3 (fromDataField v :: IO (Maybe ByteString) )
       go2 v (DataTimestamp     _) = go3 (fromDataField v :: IO (Maybe UTCTime)    )
-      go2 v (DataTimestampLtz  _) = go3 (fromDataField v :: IO (Maybe ZonedTime)  )
-      go2 v (DataTimestampTz   _) = go3 (fromDataField v :: IO (Maybe ZonedTime)  )
       go2 _ _                     = return ""
