@@ -544,12 +544,10 @@ instance Storable Data_ConnCreateParams where
 data DataValue
   = DataNull           !NativeTypeNum
   | DataBFile          !(Ptr DPI_Lob)
-  | DataBoolean        !Bool
   | DataBlob           !(Ptr DPI_Lob)
   | DataClob           !(Ptr DPI_Lob)
   | DataIntervalDs     !Data_IntervalDS
   | DataIntervalYm     !Data_IntervalYM
-  | DataDouble         !CDouble
   | DataFloat          !CFloat
   | DataInt            !Int64
   | DataUint           !Word64
@@ -560,10 +558,10 @@ data DataValue
   | DataObject         !(Ptr DPI_Object)
   | DataRowid          !(Ptr DPI_Rowid)
   | DataStmt           !(Ptr DPI_Stmt)
-  | DataTimestampD     !CDouble
-  | DataTimestampLtzD  !CDouble
-  | DataTimestampTzD   !CDouble
+
+  | DataBoolean        !Bool
   | DataBytes          !Data_Bytes
+  | DataDouble         !CDouble
   | DataTimestamp      !Data_Timestamp
   deriving Show
 
@@ -576,12 +574,10 @@ newData pd d = do
     {-# INLINE go #-}
     go (DataNull          t) = t
     go (DataBFile         _) = NativeTypeLob
-    go (DataBoolean       _) = NativeTypeBoolean
     go (DataBlob          _) = NativeTypeLob
     go (DataClob          _) = NativeTypeLob
     go (DataIntervalDs    _) = NativeTypeIntervalDs
     go (DataIntervalYm    _) = NativeTypeIntervalYm
-    go (DataDouble        _) = NativeTypeDouble
     go (DataFloat         _) = NativeTypeFloat
     go (DataInt           _) = NativeTypeInt64
     go (DataUint          _) = NativeTypeUint64
@@ -592,10 +588,10 @@ newData pd d = do
     go (DataObject        _) = NativeTypeObject
     go (DataRowid         _) = NativeTypeRowid
     go (DataStmt          _) = NativeTypeStmt
-    go (DataTimestampD    _) = NativeTypeDouble
-    go (DataTimestampLtzD _) = NativeTypeDouble
-    go (DataTimestampTzD  _) = NativeTypeDouble
+
+    go (DataBoolean       _) = NativeTypeBoolean
     go (DataBytes         _) = NativeTypeBytes
+    go (DataDouble        _) = NativeTypeDouble
     go (DataTimestamp     _) = NativeTypeTimestamp
 
 newtype Data = Data (NativeTypeNum -> OracleTypeNum -> IO DataValue)
@@ -635,9 +631,6 @@ instance Storable Data where
         {#set Data -> isNull #} p 0
         {#set Data -> value.asRowid  #} p v
       (DataStmt          v) -> libDataSetStmt   p v
-      (DataTimestampD    v) -> libDataSetDouble p v
-      (DataTimestampLtzD v) -> libDataSetDouble p v
-      (DataTimestampTzD  v) -> libDataSetDouble p v
   peek p = pure . Data $ \t o -> do
     n <- {#get Data -> isNull #} p
     if n == 1
@@ -674,7 +667,6 @@ instance Storable Data where
       NativeTypeStmt       -> fmap DataStmt               $ libDataGetStmt p
       NativeTypeRowid      -> fmap DataRowid              $ {#get Data -> value.asRowid  #} p
 
-getBytes _ = DataBytes
 
 getInt64     OracleTypeNumber       = DataNumInt
 getInt64     OracleTypeNativeInt    = DataInt
@@ -685,10 +677,6 @@ getUInt64    OracleTypeNativeUint   = DataUint
 getUInt64    _                      = DataUint
 
 getDouble    OracleTypeNumber       = DataNumDouble . realToFrac
-getDouble    OracleTypeTimestamp    = DataTimestampD
-getDouble    OracleTypeTimestampLtz = DataTimestampLtzD
-getDouble    OracleTypeTimestampTz  = DataTimestampTzD
-getDouble    OracleTypeNativeDouble = DataTimestampTzD
 getDouble    _                      = DataDouble
 
 getLOB       OracleTypeBfile        = DataBFile
@@ -697,6 +685,7 @@ getLOB       OracleTypeClob         = DataClob
 getLOB       OracleTypeNclob        = DataNClob
 getLOB       _                      = DataBlob
 
+getBytes     _ = DataBytes
 getTimestamp _ = DataTimestamp
 
 

@@ -29,8 +29,6 @@ import qualified Data.ByteString        as B
 import qualified Data.ByteString.Char8  as BC
 import qualified Data.ByteString.Unsafe as B
 import           Data.Int               (Int64)
-import           Data.List              (intercalate)
-import           Data.Maybe
 import           Data.Monoid            ((<>))
 import           Data.Scientific
 import           Data.Time
@@ -125,9 +123,6 @@ instance FromDataField UTCTime where
       (DataTimestamp     v,    OracleTypeTimestamp) -> pure . Just $ toUTCTime  v
       (DataTimestamp     v, OracleTypeTimestampLtz) -> pure . Just $ toUTCTimeL v
       (DataTimestamp     v,  OracleTypeTimestampTz) -> pure . Just $ toUTCTime  v
-      (DataTimestampD    v, _) -> return . Just $ toUTCTimeD v
-      (DataTimestampLtzD v, _) -> return . Just $ toUTCTimeD v
-      (DataTimestampTzD  v, _) -> return . Just $ toUTCTimeD v
       _                        -> singleError' name
       -- go _ _ (DataIntervalDs    v) = !Data_IntervalDS
       -- go _ _ (DataIntervalYm    v) = !Data_IntervalYM
@@ -141,9 +136,6 @@ instance FromDataField ZonedTime where
       (DataTimestamp     v,    OracleTypeTimestamp) -> pure . Just $ toZonedTime False v
       (DataTimestamp     v, OracleTypeTimestampLtz) -> pure . Just $ toZonedTime True  v
       (DataTimestamp     v,  OracleTypeTimestampTz) -> pure . Just $ toZonedTime False v
-      (DataTimestampD    v, _) -> return . Just $ utcToZonedTime utc $ toUTCTimeD v
-      (DataTimestampLtzD v, _) -> return . Just $ utcToZonedTime utc $ toUTCTimeD v
-      (DataTimestampTzD  v, _) -> return . Just $ utcToZonedTime utc $ toUTCTimeD v
       _                        -> singleError' name
       -- go _ _ (DataIntervalDs    v) = !Data_IntervalDS
       -- go _ _ (DataIntervalYm    v) = !Data_IntervalYM
@@ -227,9 +219,6 @@ instance ToDataField Float where
 
 instance ToDataField UTCTime where
   toDataField v NativeTypeTimestamp OracleTypeDate         = return $ DataTimestamp     $ fromUTCTime  v
-  toDataField v NativeTypeDouble    OracleTypeTimestamp    = return $ DataTimestampD    $ fromUTCTimeD v
-  toDataField v NativeTypeDouble    OracleTypeTimestampLtz = return $ DataTimestampLtzD $ fromUTCTimeD v
-  toDataField v NativeTypeDouble    OracleTypeTimestampTz  = return $ DataTimestampTzD  $ fromUTCTimeD v
   toDataField v NativeTypeTimestamp OracleTypeTimestamp    = return $ DataTimestamp     $ fromUTCTime  v
   toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = return $ DataTimestamp     $ fromUTCTime  v
   toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = return $ DataTimestamp     $ fromUTCTime  v
@@ -237,9 +226,6 @@ instance ToDataField UTCTime where
 
 instance ToDataField ZonedTime where
   toDataField v NativeTypeTimestamp OracleTypeDate         = return $ DataTimestamp     $ fromZonedTime v
-  -- toDataField v NativeTypeDouble    OracleTypeTimestamp    = return $ DataTimestampD    $ fromUTCTimeD  v
-  -- toDataField v NativeTypeDouble    OracleTypeTimestampLtz = return $ DataTimestampLtzD $ fromUTCTimeD  v
-  -- toDataField v NativeTypeDouble    OracleTypeTimestampTz  = return $ DataTimestampTzD  $ fromUTCTimeD  v
   toDataField v NativeTypeTimestamp OracleTypeTimestamp    = return $ DataTimestamp     $ fromZonedTime v
   toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = return $ DataTimestamp     $ fromZonedTime v
   toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = return $ DataTimestamp     $ fromZonedTime v
@@ -324,14 +310,6 @@ toZonedTime isLocal Data_Timestamp{..} =
        then utcToZonedTime timezone $ addUTCTime (fromInteger $ 60 * negate offset) UTCTime{..}
        else utcToZonedTime timezone $ addUTCTime (fromInteger $ 60 * negate offset) UTCTime{..}
 
-{-# INLINE fromUTCTimeD #-}
-fromUTCTimeD :: UTCTime -> CDouble
-fromUTCTimeD = realToFrac . utcTimeToPOSIXSeconds
-
-{-# INLINE toUTCTimeD #-}
-toUTCTimeD :: CDouble -> UTCTime
-toUTCTimeD = posixSecondsToUTCTime . realToFrac
-
 {-# INLINE singleError #-}
 singleError :: String -> IO a
 singleError name = throw $ DpiException $ "type mismatch " <> name
@@ -350,23 +328,23 @@ class FromDataFields a where
 instance FromDataFields [DataField] where
   fromDataFields' = return
 
-instance FromDataFields String where
-  fromDataFields' dfs = intercalate "," <$> sequence (fmap go dfs)
-    where
-      go  f@DataField{..} = go2 f value
-      go3 f = (fromMaybe "" . fmap show) <$> f
-      go2 v (DataBoolean       _) = go3 (fromDataField v :: IO (Maybe Bool)       )
-      go2 v (DataInt           _) = go3 (fromDataField v :: IO (Maybe Integer)    )
-      go2 v (DataNumInt        _) = go3 (fromDataField v :: IO (Maybe Integer)    )
-      go2 v (DataNumUint       _) = go3 (fromDataField v :: IO (Maybe Integer)    )
-      go2 v (DataUint          _) = go3 (fromDataField v :: IO (Maybe Integer)    )
-      go2 v (DataDouble        _) = go3 (fromDataField v :: IO (Maybe Double)     )
-      go2 v (DataNumDouble     _) = go3 (fromDataField v :: IO (Maybe Double)     )
-      go2 v (DataFloat         _) = go3 (fromDataField v :: IO (Maybe Float)      )
-      go2 v (DataIntervalDs    _) = go3 (fromDataField v :: IO (Maybe DiffTime)   )
-      go2 v (DataIntervalYm    _) = go3 (fromDataField v :: IO (Maybe DiffTime)   )
-      go2 v (DataTimestampLtzD _) = go3 (fromDataField v :: IO (Maybe ZonedTime)  )
-      go2 v (DataTimestampTzD  _) = go3 (fromDataField v :: IO (Maybe ZonedTime)  )
-      go2 v (DataBytes         _) = go3 (fromDataField v :: IO (Maybe ByteString) )
-      go2 v (DataTimestamp     _) = go3 (fromDataField v :: IO (Maybe UTCTime)    )
-      go2 _ _                     = return ""
+-- instance FromDataFields String where
+--   fromDataFields' dfs = intercalate "," <$> sequence (fmap go dfs)
+--     where
+--       go  f@DataField{..} = go2 f value
+--       go3 f = (fromMaybe "" . fmap show) <$> f
+--       go2 v (DataBoolean       _) = go3 (fromDataField v :: IO (Maybe Bool)       )
+--       go2 v (DataInt           _) = go3 (fromDataField v :: IO (Maybe Integer)    )
+--       go2 v (DataNumInt        _) = go3 (fromDataField v :: IO (Maybe Integer)    )
+--       go2 v (DataNumUint       _) = go3 (fromDataField v :: IO (Maybe Integer)    )
+--       go2 v (DataUint          _) = go3 (fromDataField v :: IO (Maybe Integer)    )
+--       go2 v (DataDouble        _) = go3 (fromDataField v :: IO (Maybe Double)     )
+--       go2 v (DataNumDouble     _) = go3 (fromDataField v :: IO (Maybe Double)     )
+--       go2 v (DataFloat         _) = go3 (fromDataField v :: IO (Maybe Float)      )
+--       go2 v (DataIntervalDs    _) = go3 (fromDataField v :: IO (Maybe DiffTime)   )
+--       go2 v (DataIntervalYm    _) = go3 (fromDataField v :: IO (Maybe DiffTime)   )
+--       go2 v (DataTimestampLtzD _) = go3 (fromDataField v :: IO (Maybe ZonedTime)  )
+--       go2 v (DataTimestampTzD  _) = go3 (fromDataField v :: IO (Maybe ZonedTime)  )
+--       go2 v (DataBytes         _) = go3 (fromDataField v :: IO (Maybe ByteString) )
+--       go2 v (DataTimestamp     _) = go3 (fromDataField v :: IO (Maybe UTCTime)    )
+--       go2 _ _                     = return ""
