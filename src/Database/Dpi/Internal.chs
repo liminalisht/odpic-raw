@@ -570,9 +570,9 @@ newData pd d = do
     go (DataDouble        _) = NativeTypeDouble
     go (DataFloat         _) = NativeTypeFloat
     go (DataInt           _) = NativeTypeInt64
-    go (DataLOB           _) = NativeTypeLob
     go (DataIntervalDs    _) = NativeTypeIntervalDs
     go (DataIntervalYm    _) = NativeTypeIntervalYm
+    go (DataLOB           _) = NativeTypeLob
     go (DataObject        _) = NativeTypeObject
     go (DataRowid         _) = NativeTypeRowid
     go (DataStmt          _) = NativeTypeStmt
@@ -585,9 +585,22 @@ instance Storable Data where
   sizeOf    _ = {#sizeof  Data #}
   alignment _ = {#alignof Data #}
   poke p (Data f) = do
-    dataValue <- f NativeTypeDouble -- this is arbitrary. we could have supplied any NativeTypeNum
-    case dataValue of
-      (DataIntervalDs Data_IntervalDS{..}) -> do
+    -- note: the NativeTypeNum is arbitrary as long as when we poke Data wrapping functions that ignore their
+    -- native type num args
+    dv <- f NativeTypeDouble
+    case dv of
+      (DataNull                          _) -> {#set Data -> isNull #} p 1
+      (DataBoolean                       v) -> libDataSetBool p (fromBool v)
+      (DataBytes            Data_Bytes{..}) -> do
+        {#set Data -> isNull #} p 0
+        let (b,bl) = bytes
+        {#set Data -> value.asBytes.ptr      #} p b
+        {#set Data -> value.asBytes.length   #} p (fromIntegral bl)
+        B.unsafeUseAsCString encoding $ {#set Data -> value.asBytes.encoding #} p
+      (DataDouble                        v) -> libDataSetDouble p v
+      (DataFloat                         v) -> libDataSetFloat  p v
+      (DataInt                           v) -> libDataSetInt64  p (fromIntegral v)
+      (DataIntervalDs  Data_IntervalDS{..}) ->
         libDataSetIntervalDS
           p
           (fromIntegral days)
@@ -595,27 +608,45 @@ instance Storable Data where
           (fromIntegral minutes)
           (fromIntegral seconds)
           (fromIntegral fseconds)
-      (DataIntervalYm  Data_IntervalYM {..}) -> libDataSetIntervalYM p years months
-      (DataObject        v) -> libDataSetObject p v
-      (DataRowid         v) -> do
+      (DataIntervalYm Data_IntervalYM {..}) ->
+         libDataSetIntervalYM
+           p
+           years
+           months
+      (DataLOB                           v) -> libDataSetLOB p v
+      (DataObject                        v) -> libDataSetObject p v
+      (DataRowid                         v) -> do
         {#set Data -> isNull #} p 0
         {#set Data -> value.asRowid  #} p v
-      (DataStmt          v) -> libDataSetStmt   p v
-
-      (DataNull          _) -> {#set Data -> isNull #} p 1
-      (DataBoolean       v) -> libDataSetBool p (fromBool v)
-      (DataBytes         v) -> setBytes p v
-      (DataDouble        v) -> libDataSetDouble p v
-      (DataFloat         v) -> libDataSetFloat  p v
-      (DataTimestamp     v) -> setTimestamp p v
-      (DataLOB           v) -> libDataSetLOB p v
-      (DataInt           v) -> libDataSetInt64  p (fromIntegral v)
-      (DataUint          v) -> libDataSetUint64 p (fromIntegral v)
+      (DataStmt                          v) -> libDataSetStmt p v
+      (DataTimestamp    Data_Timestamp{..}) ->
+        libDataSetTimestamp
+          p
+          (fromIntegral year)
+          (fromIntegral month)
+          (fromIntegral day)
+          (fromIntegral hour)
+          (fromIntegral minute)
+          (fromIntegral second)
+          (fromIntegral fsecond)
+          (fromIntegral tzHourOffset)
+          (fromIntegral tzMinuteOffset)
+      (DataUint                          v) -> libDataSetUint64 p (fromIntegral v)
   peek p = pure . Data $ \t -> do
     n <- {#get Data -> isNull #} p
     if n == 1
     then pure $ DataNull t
     else case t of
+      NativeTypeBoolean    -> fmap (DataBoolean . toBool) $ libDataGetBool p
+      NativeTypeBytes      -> do
+        ptr'     <- {#get Data -> value.asBytes.ptr      #} p
+        len      <- {#get Data -> value.asBytes.length   #} p
+        encoding <- {#get Data -> value.asBytes.encoding #} p >>= ts
+        let bytes = (ptr', fromIntegral len)
+        pure $ DataBytes Data_Bytes{..}
+      NativeTypeDouble     -> fmap DataDouble     $ libDataGetDouble p
+      NativeTypeFloat      -> fmap DataFloat      $ libDataGetFloat p
+      NativeTypeInt64      -> fmap (DataInt . ft) $ libDataGetInt64 p
       NativeTypeIntervalDs -> do
         p' <- libDataGetIntervalDS p
         if p' == nullPtr
@@ -626,47 +657,16 @@ instance Storable Data where
         if p' == nullPtr
         then pure $ DataNull t
         else fmap DataIntervalYm $ peek p'
-      NativeTypeObject     -> fmap DataObject             $ libDataGetObject p
-      NativeTypeStmt       -> fmap DataStmt               $ libDataGetStmt p
-      NativeTypeRowid      -> fmap DataRowid              $ {#get Data -> value.asRowid  #} p
-
-      NativeTypeBoolean    -> fmap (DataBoolean . toBool) $ libDataGetBool p
-      NativeTypeBytes      -> fmap DataBytes $ do
-        ptr'     <- {#get Data -> value.asBytes.ptr      #} p
-        len      <- {#get Data -> value.asBytes.length   #} p
-        encoding <- {#get Data -> value.asBytes.encoding #} p >>= ts
-        let bytes = (ptr', fromIntegral len)
-        pure $ Data_Bytes{..}
-      NativeTypeDouble     -> fmap DataDouble             $ libDataGetDouble p
-      NativeTypeFloat      -> fmap DataFloat              $ libDataGetFloat p
-      NativeTypeInt64      -> fmap (DataInt . ft)         $ libDataGetInt64 p
+      NativeTypeLob        -> fmap DataLOB    $ libDataGetLOB p
+      NativeTypeObject     -> fmap DataObject $ libDataGetObject p
+      NativeTypeRowid      -> fmap DataRowid  $ {#get Data -> value.asRowid  #} p
+      NativeTypeStmt       -> fmap DataStmt   $ libDataGetStmt p
       NativeTypeTimestamp  -> do
         p' <- libDataGetTimestamp p
         if p' == nullPtr
         then pure $ DataNull t
         else fmap DataTimestamp $ peek p'
       NativeTypeUint64     -> fmap (DataUint . ft) $ libDataGetUint64 p
-      NativeTypeLob        -> fmap DataLOB         $ libDataGetLOB p
-
-setBytes p Data_Bytes{..} = do
-  {#set Data -> isNull #} p 0
-  let (b,bl) = bytes
-  {#set Data -> value.asBytes.ptr      #} p b
-  {#set Data -> value.asBytes.length   #} p (fromIntegral bl)
-  B.unsafeUseAsCString encoding $ {#set Data -> value.asBytes.encoding #} p
-
-setTimestamp p Data_Timestamp{..} = do
-  libDataSetTimestamp
-    p
-    (fromIntegral year)
-    (fromIntegral month)
-    (fromIntegral day)
-    (fromIntegral hour)
-    (fromIntegral minute)
-    (fromIntegral second)
-    (fromIntegral fsecond)
-    (fromIntegral tzHourOffset)
-    (fromIntegral tzMinuteOffset)
 
 data Data_DataTypeInfo  = Data_DataTypeInfo
   { oracleTypeNum        :: !OracleTypeNum
