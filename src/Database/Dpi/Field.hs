@@ -167,7 +167,7 @@ instance ToDataField Bool where
 instance ToDataField Integer where
   toDataField v NativeTypeDouble OracleTypeNativeDouble = pure   $ DataDouble    $ realToFrac v
   toDataField v NativeTypeDouble OracleTypeNumber       = pure   $ DataDouble    $ realToFrac v
-  toDataField v NativeTypeFloat  OracleTypeNativeFloat  = return $ DataFloat     $ realToFrac v
+  toDataField v NativeTypeFloat  OracleTypeNativeFloat  = pure   $ DataFloat     $ realToFrac v
   toDataField v NativeTypeInt64  OracleTypeNativeInt    = pure   $ DataInt       $ fromIntegral v
   toDataField v NativeTypeInt64  OracleTypeNumber       = pure   $ DataInt       $ fromIntegral v
   toDataField v NativeTypeUint64 OracleTypeNativeUint   = pure   $ DataUint      $ fromIntegral v
@@ -187,37 +187,37 @@ instance ToDataField Word64 where
   toDataField v = toDataField (toInteger v)
 
 instance ToDataField Scientific where
-  toDataField v NativeTypeDouble OracleTypeNativeDouble = pure   $ DataDouble    $ realToFrac v
-  toDataField v NativeTypeDouble OracleTypeNumber       = pure   $ DataDouble    $ realToFrac v
-  toDataField v NativeTypeFloat  OracleTypeNativeFloat  = return $ DataFloat     $ realToFrac v
+  toDataField v NativeTypeDouble OracleTypeNativeDouble = pure $ DataDouble $ realToFrac v
+  toDataField v NativeTypeDouble OracleTypeNumber       = pure $ DataDouble $ realToFrac v
+  toDataField v NativeTypeFloat  OracleTypeNativeFloat  = pure $ DataFloat  $ realToFrac v
   toDataField _ _                 _                     = singleError "Decimal"
 
 instance ToDataField Double where
-  toDataField v NativeTypeDouble OracleTypeNativeDouble = pure   $ DataDouble    $ realToFrac v
-  toDataField v NativeTypeDouble OracleTypeNumber       = pure    $ DataDouble    $ realToFrac v
-  toDataField v NativeTypeFloat  OracleTypeNativeFloat  = return $ DataFloat     $ realToFrac v
+  toDataField v NativeTypeDouble OracleTypeNativeDouble = pure $ DataDouble $ realToFrac v
+  toDataField v NativeTypeDouble OracleTypeNumber       = pure $ DataDouble $ realToFrac v
+  toDataField v NativeTypeFloat  OracleTypeNativeFloat  = pure $ DataFloat  $ realToFrac v
   toDataField _ _                 _                     = singleError "Double"
 
 instance ToDataField Float where
   toDataField v = toDataField (realToFrac v :: Double)
 
 instance ToDataField UTCTime where
-  toDataField v NativeTypeTimestamp OracleTypeDate         = pure $ DataTimestamp     $ fromUTCTime  v
-  toDataField v NativeTypeTimestamp OracleTypeTimestamp    = pure $ DataTimestamp     $ fromUTCTime  v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = pure $ DataTimestamp     $ fromUTCTime  v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = pure $ DataTimestamp     $ fromUTCTime  v
+  toDataField v NativeTypeTimestamp OracleTypeDate         = pure $ DataTimestamp $ fromUTCTime  v
+  toDataField v NativeTypeTimestamp OracleTypeTimestamp    = pure $ DataTimestamp $ fromUTCTime  v
+  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = pure $ DataTimestamp $ fromUTCTime  v
+  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = pure $ DataTimestamp $ fromUTCTime  v
   toDataField _ _                 _                        = singleError "UTCTime"
 
 instance ToDataField ZonedTime where
-  toDataField v NativeTypeTimestamp OracleTypeDate         = pure $ DataTimestamp     $ fromZonedTime v
-  toDataField v NativeTypeTimestamp OracleTypeTimestamp    = pure $ DataTimestamp     $ fromZonedTime v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = pure $ DataTimestamp     $ fromZonedTime v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = pure $ DataTimestamp     $ fromZonedTime v
+  toDataField v NativeTypeTimestamp OracleTypeDate         = pure $ DataTimestamp $ fromZonedTime v
+  toDataField v NativeTypeTimestamp OracleTypeTimestamp    = pure $ DataTimestamp $ fromZonedTime v
+  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = pure $ DataTimestamp $ fromZonedTime v
+  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = pure $ DataTimestamp $ fromZonedTime v
   toDataField _ _                 _                        = singleError "ZonedTime"
 
 instance ToDataField DiffTime where
-  toDataField v NativeTypeIntervalDs OracleTypeIntervalDs = return $ DataIntervalDs $ fromDiffTime  v
-  toDataField v NativeTypeIntervalYm OracleTypeIntervalYm = return $ DataIntervalYm $ fromDiffTime' v
+  toDataField v NativeTypeIntervalDs OracleTypeIntervalDs = pure $ DataIntervalDs $ fromDiffTime  v
+  toDataField v NativeTypeIntervalYm OracleTypeIntervalYm = pure $ DataIntervalYm $ fromDiffTime' v
   toDataField _ _                 _                       = singleError "DiffTime"
 
 fromByteString :: ByteString -> IO Data_Bytes

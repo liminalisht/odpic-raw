@@ -5,7 +5,6 @@
 module Database.Dpi.Internal where
 
 import           Database.Dpi.Prelude
-import           Data.Scientific
 import qualified Data.ByteString.Unsafe as B
 
 #include <dpi.h>
@@ -543,21 +542,17 @@ instance Storable Data_ConnCreateParams where
 
 data DataValue
   = DataNull           !NativeTypeNum
-  | DataBFile          !(Ptr DPI_Lob)
-  | DataBlob           !(Ptr DPI_Lob)
-  | DataClob           !(Ptr DPI_Lob)
-  | DataIntervalDs     !Data_IntervalDS
-  | DataIntervalYm     !Data_IntervalYM
-  | DataFloat          !CFloat
-  | DataNClob          !(Ptr DPI_Lob)
-  | DataObject         !(Ptr DPI_Object)
-  | DataRowid          !(Ptr DPI_Rowid)
-  | DataStmt           !(Ptr DPI_Stmt)
-
   | DataBoolean        !Bool
   | DataBytes          !Data_Bytes
   | DataDouble         !CDouble
+  | DataFloat          !CFloat
   | DataInt            !Int64
+  | DataIntervalDs     !Data_IntervalDS
+  | DataIntervalYm     !Data_IntervalYM
+  | DataLOB            !(Ptr DPI_Lob)
+  | DataObject         !(Ptr DPI_Object)
+  | DataRowid          !(Ptr DPI_Rowid)
+  | DataStmt           !(Ptr DPI_Stmt)
   | DataTimestamp      !Data_Timestamp
   | DataUint           !Word64
   deriving Show
@@ -565,39 +560,33 @@ data DataValue
 {-# INLINE newData #-}
 newData :: PtrData -> DataValue -> IO NativeTypeNum
 newData pd d = do
-  poke pd (Data $ \_ _ -> pure d)
+  poke pd (Data $ \_ -> pure d)
   pure $ go d
   where
     {-# INLINE go #-}
     go (DataNull          t) = t
-    go (DataBFile         _) = NativeTypeLob
-    go (DataBlob          _) = NativeTypeLob
-    go (DataClob          _) = NativeTypeLob
-    go (DataIntervalDs    _) = NativeTypeIntervalDs
-    go (DataIntervalYm    _) = NativeTypeIntervalYm
-    go (DataFloat         _) = NativeTypeFloat
-    go (DataNClob         _) = NativeTypeLob
-    go (DataObject        _) = NativeTypeObject
-    go (DataRowid         _) = NativeTypeRowid
-    go (DataStmt          _) = NativeTypeStmt
-
     go (DataBoolean       _) = NativeTypeBoolean
     go (DataBytes         _) = NativeTypeBytes
     go (DataDouble        _) = NativeTypeDouble
+    go (DataFloat         _) = NativeTypeFloat
     go (DataInt           _) = NativeTypeInt64
+    go (DataLOB           _) = NativeTypeLob
+    go (DataIntervalDs    _) = NativeTypeIntervalDs
+    go (DataIntervalYm    _) = NativeTypeIntervalYm
+    go (DataObject        _) = NativeTypeObject
+    go (DataRowid         _) = NativeTypeRowid
+    go (DataStmt          _) = NativeTypeStmt
     go (DataTimestamp     _) = NativeTypeTimestamp
     go (DataUint          _) = NativeTypeUint64
 
-newtype Data = Data (NativeTypeNum -> OracleTypeNum -> IO DataValue)
+newtype Data = Data (NativeTypeNum -> IO DataValue)
 
 instance Storable Data where
   sizeOf    _ = {#sizeof  Data #}
   alignment _ = {#alignof Data #}
   poke p (Data f) = do
-    dataValue <- f NativeTypeDouble OracleTypeBoolean
+    dataValue <- f NativeTypeDouble -- this is arbitrary. we could have supplied any NativeTypeNum
     case dataValue of
-      (DataNull          _) -> {#set Data -> isNull #} p 1
-      (DataBoolean       v) -> libDataSetBool p (fromBool v)
       (DataIntervalDs Data_IntervalDS{..}) -> do
         libDataSetIntervalDS
           p
@@ -607,42 +596,26 @@ instance Storable Data where
           (fromIntegral seconds)
           (fromIntegral fseconds)
       (DataIntervalYm  Data_IntervalYM {..}) -> libDataSetIntervalYM p years months
-      (DataBytes         v) -> setBytes p v
-      (DataTimestamp     v) -> setTimestamp p v
-      (DataBFile         v) -> libDataSetLOB p v
-      (DataNClob         v) -> libDataSetLOB p v
-      (DataBlob          v) -> libDataSetLOB p v
-      (DataClob          v) -> libDataSetLOB p v
-      (DataDouble        v) -> libDataSetDouble p v
-      (DataFloat         v) -> libDataSetFloat  p v
-      (DataInt           v) -> libDataSetInt64  p (fromIntegral v)
-      (DataUint          v) -> libDataSetUint64 p (fromIntegral v)
       (DataObject        v) -> libDataSetObject p v
       (DataRowid         v) -> do
         {#set Data -> isNull #} p 0
         {#set Data -> value.asRowid  #} p v
       (DataStmt          v) -> libDataSetStmt   p v
-  peek p = pure . Data $ \t o -> do
+
+      (DataNull          _) -> {#set Data -> isNull #} p 1
+      (DataBoolean       v) -> libDataSetBool p (fromBool v)
+      (DataBytes         v) -> setBytes p v
+      (DataDouble        v) -> libDataSetDouble p v
+      (DataFloat         v) -> libDataSetFloat  p v
+      (DataTimestamp     v) -> setTimestamp p v
+      (DataLOB           v) -> libDataSetLOB p v
+      (DataInt           v) -> libDataSetInt64  p (fromIntegral v)
+      (DataUint          v) -> libDataSetUint64 p (fromIntegral v)
+  peek p = pure . Data $ \t -> do
     n <- {#get Data -> isNull #} p
     if n == 1
     then pure $ DataNull t
     else case t of
-      NativeTypeBoolean    -> fmap (DataBoolean . toBool) $ libDataGetBool p
-      NativeTypeInt64      -> fmap (getInt64  o . ft)     $ libDataGetInt64 p
-      NativeTypeUint64     -> fmap (getUInt64 o . ft)     $ libDataGetUint64 p
-      NativeTypeFloat      -> fmap DataFloat              $ libDataGetFloat p
-      NativeTypeDouble     -> fmap DataDouble             $ libDataGetDouble p
-      NativeTypeBytes      -> fmap (getBytes o)           $ do
-        ptr'     <- {#get Data -> value.asBytes.ptr      #} p
-        len      <- {#get Data -> value.asBytes.length   #} p
-        encoding <- {#get Data -> value.asBytes.encoding #} p >>= ts
-        let bytes = (ptr', fromIntegral len)
-        pure $ Data_Bytes{..}
-      NativeTypeTimestamp  -> do
-        p' <- libDataGetTimestamp p
-        if p' == nullPtr
-        then pure $ DataNull t
-        else fmap DataTimestamp $ peek p'
       NativeTypeIntervalDs -> do
         p' <- libDataGetIntervalDS p
         if p' == nullPtr
@@ -653,23 +626,27 @@ instance Storable Data where
         if p' == nullPtr
         then pure $ DataNull t
         else fmap DataIntervalYm $ peek p'
-      NativeTypeLob        -> fmap (getLOB o)             $ libDataGetLOB p
       NativeTypeObject     -> fmap DataObject             $ libDataGetObject p
       NativeTypeStmt       -> fmap DataStmt               $ libDataGetStmt p
       NativeTypeRowid      -> fmap DataRowid              $ {#get Data -> value.asRowid  #} p
 
-getLOB       OracleTypeBfile        = DataBFile
-getLOB       OracleTypeBlob         = DataBlob
-getLOB       OracleTypeClob         = DataClob
-getLOB       OracleTypeNclob        = DataNClob
-getLOB       _                      = DataBlob
-
-getBytes     _                      = DataBytes
-getDouble    _                      = DataDouble
-getInt64     _                      = DataInt
-getTimestamp _                      = DataTimestamp
-getUInt64    _                      = DataUint
-
+      NativeTypeBoolean    -> fmap (DataBoolean . toBool) $ libDataGetBool p
+      NativeTypeBytes      -> fmap DataBytes $ do
+        ptr'     <- {#get Data -> value.asBytes.ptr      #} p
+        len      <- {#get Data -> value.asBytes.length   #} p
+        encoding <- {#get Data -> value.asBytes.encoding #} p >>= ts
+        let bytes = (ptr', fromIntegral len)
+        pure $ Data_Bytes{..}
+      NativeTypeDouble     -> fmap DataDouble             $ libDataGetDouble p
+      NativeTypeFloat      -> fmap DataFloat              $ libDataGetFloat p
+      NativeTypeInt64      -> fmap (DataInt . ft)         $ libDataGetInt64 p
+      NativeTypeTimestamp  -> do
+        p' <- libDataGetTimestamp p
+        if p' == nullPtr
+        then pure $ DataNull t
+        else fmap DataTimestamp $ peek p'
+      NativeTypeUint64     -> fmap (DataUint . ft) $ libDataGetUint64 p
+      NativeTypeLob        -> fmap DataLOB         $ libDataGetLOB p
 
 setBytes p Data_Bytes{..} = do
   {#set Data -> isNull #} p 0
@@ -915,6 +892,7 @@ data Data_ShardingKeyColumn  = Data_ShardingKeyColumn
   , value         :: !DataValue
   } deriving Show
 
+-- TODO: check this out too, see if we can reuse lib* fns
 instance Storable Data_ShardingKeyColumn where
   sizeOf    _ = {#sizeof  ShardingKeyColumn #}
   alignment _ = {#alignof ShardingKeyColumn #}
@@ -925,11 +903,11 @@ instance Storable Data_ShardingKeyColumn where
     value         <- go p' nativeTypeNum oracleTypeNum
     return Data_ShardingKeyColumn {..}
     where
-      go p NativeTypeInt64  o = (getInt64 o  . ft) <$> {#get ShardingKeyColumn -> value.asInt64      #} p
-      go p NativeTypeUint64 o = (getUInt64 o . ft) <$> {#get ShardingKeyColumn -> value.asUint64     #} p
-      go p NativeTypeFloat  _ = DataFloat          <$> {#get ShardingKeyColumn -> value.asFloat      #} p
-      go p NativeTypeDouble o = getDouble o        <$> {#get ShardingKeyColumn -> value.asDouble     #} p
-      go p NativeTypeBytes  o = getBytes o         <$> do
+      go p NativeTypeInt64  _ = (DataInt . ft)  <$> {#get ShardingKeyColumn -> value.asInt64      #} p
+      go p NativeTypeUint64 _ = (DataUint . ft) <$> {#get ShardingKeyColumn -> value.asUint64     #} p
+      go p NativeTypeFloat  _ = DataFloat  <$> {#get ShardingKeyColumn -> value.asFloat      #} p
+      go p NativeTypeDouble _ = DataDouble <$> {#get ShardingKeyColumn -> value.asDouble     #} p
+      go p NativeTypeBytes  _ = DataBytes  <$> do
         ptr'     <- {#get ShardingKeyColumn -> value.asBytes.ptr      #} p
         len      <- {#get ShardingKeyColumn -> value.asBytes.length   #} p
         encoding <- {#get ShardingKeyColumn -> value.asBytes.encoding #} p >>= ts
@@ -957,7 +935,7 @@ instance Storable Data_ShardingKeyColumn where
         years    <- {#get ShardingKeyColumn -> value.asIntervalYM.years    #} p
         months   <- {#get ShardingKeyColumn -> value.asIntervalYM.months   #} p
         return Data_IntervalYM {..}
-      go p NativeTypeLob        o = getLOB o              <$> {#get ShardingKeyColumn -> value.asLOB        #} p
+      go p NativeTypeLob        _ = DataLOB               <$> {#get ShardingKeyColumn -> value.asLOB        #} p
       go p NativeTypeObject     _ = DataObject            <$> {#get ShardingKeyColumn -> value.asObject     #} p
       go p NativeTypeStmt       _ = DataStmt              <$> {#get ShardingKeyColumn -> value.asStmt       #} p
       go p NativeTypeRowid      _ = DataRowid             <$> {#get ShardingKeyColumn -> value.asRowid      #} p

@@ -202,8 +202,9 @@ peekMaybeCStrLen :: (Ptr (Ptr CChar), Ptr CUInt) -> IO (Maybe ByteString)
 peekMaybeCStrLen ps@(p,_) | p == nullPtr = return Nothing
                           | otherwise    = Just <$> peekCStrLen ps
 
+-- TODO: remove oracle type num param?
 {-# INLINE _get #-}
 _get :: OracleTypeNum -> NativeTypeNum -> PtrData -> IO DataValue
-_get !ot !t !p = do
+_get _ !t !p = do
   Data !get <- peek p
-  get t ot
+  get t
