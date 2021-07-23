@@ -72,63 +72,63 @@ instance FromDataField FromDataField Float91,92
   fromDataField fromDataField92,93
 instance FromDataField FromDataField Scientific94,95
   fromDataField fromDataField95,96
-instance FromDataField FromDataField Bool106,107
-  fromDataField fromDataField107,108
-instance FromDataField FromDataField UTCTime113,114
-  fromDataField fromDataField114,115
-instance FromDataField FromDataField ZonedTime126,127
-  fromDataField fromDataField127,128
-instance FromDataField FromDataField LocalTime139,140
+instance FromDataField FromDataField Bool105,106
+  fromDataField fromDataField106,107
+instance FromDataField FromDataField UTCTime112,113
+  fromDataField fromDataField113,114
+instance FromDataField FromDataField ZonedTime123,124
+  fromDataField fromDataField124,125
+instance FromDataField FromDataField LocalTime134,135
+  fromDataField fromDataField135,136
+instance FromDataField FromDataField DiffTime139,140
   fromDataField fromDataField140,141
-instance FromDataField FromDataField DiffTime144,145
-  fromDataField fromDataField145,146
-class ToDataField ToDataField153,154
-  toDataField toDataField154,155
-instance ToDataField ToDataField ByteString156,157
-  toDataField toDataField157,158
-instance ToDataField ToDataField Bool167,168
-  toDataField toDataField168,169
-instance ToDataField ToDataField Integer171,172
-  toDataField toDataField172,173
-instance ToDataField ToDataField Int181,182
-  toDataField toDataField182,183
-instance ToDataField ToDataField Int64184,185
-  toDataField toDataField185,186
-instance ToDataField ToDataField Word187,188
-  toDataField toDataField188,189
-instance ToDataField ToDataField Word64190,191
-  toDataField toDataField191,192
-instance ToDataField ToDataField Scientific193,194
-  toDataField toDataField194,195
-instance ToDataField ToDataField Double203,204
+class ToDataField ToDataField148,149
+  toDataField toDataField149,150
+instance ToDataField ToDataField ByteString151,152
+  toDataField toDataField152,153
+instance ToDataField ToDataField Bool162,163
+  toDataField toDataField163,164
+instance ToDataField ToDataField Integer166,167
+  toDataField toDataField167,168
+instance ToDataField ToDataField Int176,177
+  toDataField toDataField177,178
+instance ToDataField ToDataField Int64179,180
+  toDataField toDataField180,181
+instance ToDataField ToDataField Word182,183
+  toDataField toDataField183,184
+instance ToDataField ToDataField Word64185,186
+  toDataField toDataField186,187
+instance ToDataField ToDataField Scientific188,189
+  toDataField toDataField189,190
+instance ToDataField ToDataField Double194,195
+  toDataField toDataField195,196
+instance ToDataField ToDataField Float200,201
+  toDataField toDataField201,202
+instance ToDataField ToDataField UTCTime203,204
   toDataField toDataField204,205
-instance ToDataField ToDataField Float213,214
-  toDataField toDataField214,215
-instance ToDataField ToDataField UTCTime216,217
-  toDataField toDataField217,218
-instance ToDataField ToDataField ZonedTime223,224
-  toDataField toDataField224,225
-instance ToDataField ToDataField DiffTime230,231
-  toDataField toDataField231,232
-fromByteString fromByteString235,236
-toByteString toByteString239,240
-fromDiffTime fromDiffTime243,244
-pico pico252,253
-fromDiffTime' fromDiffTime'256,257
-toDiffTime toDiffTime263,264
-toDiffTime' toDiffTime'267,268
-fromUTCTime fromUTCTime271,272
-toUTCTime toUTCTime278,279
-toUTCTimeL toUTCTimeL282,283
-fromZonedTime fromZonedTime286,287
-toZonedTime toZonedTime294,295
-singleError singleError310,311
-singleError' singleError'314,315
-class FromDataFields FromDataFields317,318
-  fromDataFields' fromDataFields'318,319
-  fromDataFields fromDataFields320,321
-instance FromDataFields FromDataFields [DataField]324,325
-  fromDataFields' fromDataFields'325,326
+instance ToDataField ToDataField ZonedTime210,211
+  toDataField toDataField211,212
+instance ToDataField ToDataField DiffTime217,218
+  toDataField toDataField218,219
+fromByteString fromByteString222,223
+toByteString toByteString226,227
+fromDiffTime fromDiffTime230,231
+pico pico239,240
+fromDiffTime' fromDiffTime'243,244
+toDiffTime toDiffTime250,251
+toDiffTime' toDiffTime'254,255
+fromUTCTime fromUTCTime258,259
+toUTCTime toUTCTime265,266
+toUTCTimeL toUTCTimeL269,270
+fromZonedTime fromZonedTime273,274
+toZonedTime toZonedTime281,282
+singleError singleError297,298
+singleError' singleError'301,302
+class FromDataFields FromDataFields304,305
+  fromDataFields' fromDataFields'305,306
+  fromDataFields fromDataFields307,308
+instance FromDataFields FromDataFields [DataField]311,312
+  fromDataFields' fromDataFields'312,313
 
 ./src/Database/Dpi/Util.hs,1741
 module Database.Dpi.Util Database.Dpi.Util9,10

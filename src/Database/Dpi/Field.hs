@@ -67,7 +67,7 @@ readDataField dfm name = case lookup name dfm of
 instance FromDataField ByteString where
   fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
     where
-      go _ _ (DataNull          _) = return Nothing
+      go _ _ (DataNull          _) = pure Nothing
       go _ _ (DataBytes         v) = Just <$> toByteString v
       go n _ _                     = singleError' n
 
@@ -95,20 +95,19 @@ instance FromDataField Float where
 instance FromDataField Scientific where
   fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
     where
-      go _ _ (DataNull          _) = return Nothing
+      go _ _ (DataNull          _) = pure Nothing
+      go _ _ (DataDouble        v) = pure . Just $ realToFrac v
       go _ _ (DataInt           v) = pure . Just $ realToFrac v
       go _ _ (DataUint          v) = pure . Just $ realToFrac v
-      go _ _ (DataFloat         v) = return . Just $ realToFrac v
-      go _ _ (DataNumDouble     v) = return . Just $ realToFrac v
-      go _ _ (DataDouble        v) = return . Just $ realToFrac v
+      go _ _ (DataFloat         v) = pure . Just $ realToFrac v
       go _ _ (DataBytes Data_Bytes{..}) = (Just . read . BC.unpack) <$> tsLen bytes
       go n _ _                     = singleError' n
 
 instance FromDataField Bool where
   fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
     where
-      go _ _ (DataNull          _) = return Nothing
-      go _ _ (DataBoolean       v) = return $ Just v
+      go _ _ (DataNull          _) = pure Nothing
+      go _ _ (DataBoolean       v) = pure $ Just v
       go n _ _                     = singleError' n
 
 instance FromDataField UTCTime where
@@ -121,8 +120,6 @@ instance FromDataField UTCTime where
       (DataTimestamp     v, OracleTypeTimestampLtz) -> pure . Just $ toUTCTimeL v
       (DataTimestamp     v,  OracleTypeTimestampTz) -> pure . Just $ toUTCTime  v
       _                        -> singleError' name
-      -- go _ _ (DataIntervalDs    v) = !Data_IntervalDS
-      -- go _ _ (DataIntervalYm    v) = !Data_IntervalYM
 
 instance FromDataField ZonedTime where
   fromDataField DataField{..} =
@@ -134,8 +131,6 @@ instance FromDataField ZonedTime where
       (DataTimestamp     v, OracleTypeTimestampLtz) -> pure . Just $ toZonedTime True  v
       (DataTimestamp     v,  OracleTypeTimestampTz) -> pure . Just $ toZonedTime False v
       _                        -> singleError' name
-      -- go _ _ (DataIntervalDs    v) = !Data_IntervalDS
-      -- go _ _ (DataIntervalYm    v) = !Data_IntervalYM
 
 instance FromDataField LocalTime where
   fromDataField = fmap (fmap go) . fromDataField
@@ -170,8 +165,8 @@ instance ToDataField Bool where
   toDataField _ _                 _                 = singleError "Bool"
 
 instance ToDataField Integer where
-  toDataField v NativeTypeDouble OracleTypeNativeDouble = return $ DataDouble    $ realToFrac v
-  toDataField v NativeTypeDouble OracleTypeNumber       = return $ DataNumDouble $ realToFrac v
+  toDataField v NativeTypeDouble OracleTypeNativeDouble = pure   $ DataDouble    $ realToFrac v
+  toDataField v NativeTypeDouble OracleTypeNumber       = pure   $ DataDouble    $ realToFrac v
   toDataField v NativeTypeFloat  OracleTypeNativeFloat  = return $ DataFloat     $ realToFrac v
   toDataField v NativeTypeInt64  OracleTypeNativeInt    = pure   $ DataInt       $ fromIntegral v
   toDataField v NativeTypeInt64  OracleTypeNumber       = pure   $ DataInt       $ fromIntegral v
@@ -192,40 +187,32 @@ instance ToDataField Word64 where
   toDataField v = toDataField (toInteger v)
 
 instance ToDataField Scientific where
-  toDataField v NativeTypeDouble OracleTypeNativeDouble = return $ DataDouble    $ realToFrac v
-  toDataField v NativeTypeDouble OracleTypeNumber       = return $ DataNumDouble $ realToFrac v
+  toDataField v NativeTypeDouble OracleTypeNativeDouble = pure   $ DataDouble    $ realToFrac v
+  toDataField v NativeTypeDouble OracleTypeNumber       = pure   $ DataDouble    $ realToFrac v
   toDataField v NativeTypeFloat  OracleTypeNativeFloat  = return $ DataFloat     $ realToFrac v
-  toDataField v NativeTypeInt64  OracleTypeNativeInt    = pure   $ DataInt       $ round v
-  toDataField v NativeTypeInt64  OracleTypeNumber       = pure   $ DataInt       $ round v
-  toDataField v NativeTypeUint64 OracleTypeNativeUint   = pure   $ DataUint      $ round v
-  toDataField v NativeTypeUint64 OracleTypeNumber       = pure   $ DataUint   $ round v
   toDataField _ _                 _                     = singleError "Decimal"
 
 instance ToDataField Double where
-  toDataField v NativeTypeDouble OracleTypeNativeDouble = return $ DataDouble    $ realToFrac v
-  toDataField v NativeTypeDouble OracleTypeNumber       = return $ DataNumDouble $ realToFrac v
+  toDataField v NativeTypeDouble OracleTypeNativeDouble = pure   $ DataDouble    $ realToFrac v
+  toDataField v NativeTypeDouble OracleTypeNumber       = pure    $ DataDouble    $ realToFrac v
   toDataField v NativeTypeFloat  OracleTypeNativeFloat  = return $ DataFloat     $ realToFrac v
-  toDataField v NativeTypeInt64  OracleTypeNativeInt    = pure   $ DataInt       $ round v
-  toDataField v NativeTypeInt64  OracleTypeNumber       = pure   $ DataInt       $ round v
-  toDataField v NativeTypeUint64 OracleTypeNativeUint   = pure   $ DataUint      $ round v
-  toDataField v NativeTypeUint64 OracleTypeNumber       = pure   $ DataUint   $ round v
   toDataField _ _                 _                     = singleError "Double"
 
 instance ToDataField Float where
   toDataField v = toDataField (realToFrac v :: Double)
 
 instance ToDataField UTCTime where
-  toDataField v NativeTypeTimestamp OracleTypeDate         = return $ DataTimestamp     $ fromUTCTime  v
-  toDataField v NativeTypeTimestamp OracleTypeTimestamp    = return $ DataTimestamp     $ fromUTCTime  v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = return $ DataTimestamp     $ fromUTCTime  v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = return $ DataTimestamp     $ fromUTCTime  v
+  toDataField v NativeTypeTimestamp OracleTypeDate         = pure $ DataTimestamp     $ fromUTCTime  v
+  toDataField v NativeTypeTimestamp OracleTypeTimestamp    = pure $ DataTimestamp     $ fromUTCTime  v
+  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = pure $ DataTimestamp     $ fromUTCTime  v
+  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = pure $ DataTimestamp     $ fromUTCTime  v
   toDataField _ _                 _                        = singleError "UTCTime"
 
 instance ToDataField ZonedTime where
-  toDataField v NativeTypeTimestamp OracleTypeDate         = return $ DataTimestamp     $ fromZonedTime v
-  toDataField v NativeTypeTimestamp OracleTypeTimestamp    = return $ DataTimestamp     $ fromZonedTime v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = return $ DataTimestamp     $ fromZonedTime v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = return $ DataTimestamp     $ fromZonedTime v
+  toDataField v NativeTypeTimestamp OracleTypeDate         = pure $ DataTimestamp     $ fromZonedTime v
+  toDataField v NativeTypeTimestamp OracleTypeTimestamp    = pure $ DataTimestamp     $ fromZonedTime v
+  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = pure $ DataTimestamp     $ fromZonedTime v
+  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = pure $ DataTimestamp     $ fromZonedTime v
   toDataField _ _                 _                        = singleError "ZonedTime"
 
 instance ToDataField DiffTime where
@@ -324,24 +311,3 @@ class FromDataFields a where
 
 instance FromDataFields [DataField] where
   fromDataFields' = return
-
--- instance FromDataFields String where
---   fromDataFields' dfs = intercalate "," <$> sequence (fmap go dfs)
---     where
---       go  f@DataField{..} = go2 f value
---       go3 f = (fromMaybe "" . fmap show) <$> f
---       go2 v (DataBoolean       _) = go3 (fromDataField v :: IO (Maybe Bool)       )
---       go2 v (DataInt           _) = go3 (fromDataField v :: IO (Maybe Integer)    )
---       go2 v (DataNumInt        _) = go3 (fromDataField v :: IO (Maybe Integer)    )
---       go2 v (DataNumUint       _) = go3 (fromDataField v :: IO (Maybe Integer)    )
---       go2 v (DataUint          _) = go3 (fromDataField v :: IO (Maybe Integer)    )
---       go2 v (DataDouble        _) = go3 (fromDataField v :: IO (Maybe Double)     )
---       go2 v (DataNumDouble     _) = go3 (fromDataField v :: IO (Maybe Double)     )
---       go2 v (DataFloat         _) = go3 (fromDataField v :: IO (Maybe Float)      )
---       go2 v (DataIntervalDs    _) = go3 (fromDataField v :: IO (Maybe DiffTime)   )
---       go2 v (DataIntervalYm    _) = go3 (fromDataField v :: IO (Maybe DiffTime)   )
---       go2 v (DataTimestampLtzD _) = go3 (fromDataField v :: IO (Maybe ZonedTime)  )
---       go2 v (DataTimestampTzD  _) = go3 (fromDataField v :: IO (Maybe ZonedTime)  )
---       go2 v (DataBytes         _) = go3 (fromDataField v :: IO (Maybe ByteString) )
---       go2 v (DataTimestamp     _) = go3 (fromDataField v :: IO (Maybe UTCTime)    )
---       go2 _ _                     = return ""

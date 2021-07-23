@@ -550,7 +550,6 @@ data DataValue
   | DataIntervalYm     !Data_IntervalYM
   | DataFloat          !CFloat
   | DataNClob          !(Ptr DPI_Lob)
-  | DataNumDouble      !Scientific
   | DataObject         !(Ptr DPI_Object)
   | DataRowid          !(Ptr DPI_Rowid)
   | DataStmt           !(Ptr DPI_Stmt)
@@ -578,7 +577,6 @@ newData pd d = do
     go (DataIntervalYm    _) = NativeTypeIntervalYm
     go (DataFloat         _) = NativeTypeFloat
     go (DataNClob         _) = NativeTypeLob
-    go (DataNumDouble     _) = NativeTypeDouble
     go (DataObject        _) = NativeTypeObject
     go (DataRowid         _) = NativeTypeRowid
     go (DataStmt          _) = NativeTypeStmt
@@ -619,7 +617,6 @@ instance Storable Data where
       (DataFloat         v) -> libDataSetFloat  p v
       (DataInt           v) -> libDataSetInt64  p (fromIntegral v)
       (DataUint          v) -> libDataSetUint64 p (fromIntegral v)
-      (DataNumDouble     v) -> libDataSetDouble p (realToFrac v)
       (DataObject        v) -> libDataSetObject p v
       (DataRowid         v) -> do
         {#set Data -> isNull #} p 0
@@ -661,18 +658,13 @@ instance Storable Data where
       NativeTypeStmt       -> fmap DataStmt               $ libDataGetStmt p
       NativeTypeRowid      -> fmap DataRowid              $ {#get Data -> value.asRowid  #} p
 
-
-
-
-
 getLOB       OracleTypeBfile        = DataBFile
 getLOB       OracleTypeBlob         = DataBlob
 getLOB       OracleTypeClob         = DataClob
 getLOB       OracleTypeNclob        = DataNClob
 getLOB       _                      = DataBlob
 
-getBytes     _ = DataBytes
-getDouble    OracleTypeNumber       = DataNumDouble . realToFrac
+getBytes     _                      = DataBytes
 getDouble    _                      = DataDouble
 getInt64     _                      = DataInt
 getTimestamp _                      = DataTimestamp
