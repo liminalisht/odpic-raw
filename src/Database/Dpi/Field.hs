@@ -30,7 +30,6 @@ import qualified Data.ByteString.Char8  as BC
 import qualified Data.ByteString.Unsafe as B
 import           Data.Int               (Int64)
 import           Data.Monoid            ((<>))
-import           Data.Scientific
 import           Data.Time
 
 -- | Database Raw Data with Type Info
@@ -66,46 +65,42 @@ class FromDataField a where
   fromDataField  :: DataField -> IO (Maybe a) --todo: should this be Either?
 
 instance FromDataField Bool where
-  fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
-    where
-      go _ _ (DataNull          _) = pure Nothing
-      go _ _ (DataBoolean       v) = pure $ Just v
-      go n _ _                     = singleError' n
+  fromDataField DataField{..} = let Data_QueryInfo{..} = info in case value of
+    (DataNull    _) -> pure Nothing
+    (DataBoolean v) -> pure $ Just v
+    _ -> singleError' name
 
 instance FromDataField ByteString where
-  fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
-    where
-      go _ _ (DataNull          _) = pure Nothing
-      go _ _ (DataBytes         v) = Just <$> toByteString v
-      go n _ _                     = singleError' n
-
-instance FromDataField Integer where
-  fromDataField = fmap (fmap (round :: Scientific -> Integer)) . fromDataField
+  fromDataField DataField{..} = let Data_QueryInfo{..} = info in case value of
+    (DataNull  _) -> pure Nothing
+    (DataBytes v) -> fmap Just $ toByteString v
+    _ -> singleError' name
 
 instance FromDataField Int64 where
-  fromDataField = fmap (fmap fromInteger) . fromDataField
+  fromDataField DataField{..} = let Data_QueryInfo{..} = info in case value of
+    (DataNull _) -> pure Nothing
+    (DataInt  v) -> pure . Just $ v
+    _ -> singleError' name
 
 instance FromDataField Word64 where
-  fromDataField = fmap (fmap fromInteger) . fromDataField
+  fromDataField DataField{..} = let Data_QueryInfo{..} = info in case value of
+    (DataNull  _) -> pure Nothing
+    (DataUint  v) -> pure . Just $ v
+    _ -> singleError' name
 
 instance FromDataField Double where
-  fromDataField = fmap (fmap (realToFrac :: Scientific -> Double)) . fromDataField
+  fromDataField DataField{..} = let Data_QueryInfo{..} = info in case value of
+    (DataNull             _) -> pure Nothing
+    (DataDouble (CDouble v)) -> pure . Just $ v
+    _ -> singleError' name
 
 instance FromDataField Float where
-  fromDataField = fmap (fmap (realToFrac :: Scientific -> Float)) . fromDataField
+  fromDataField DataField{..} = let Data_QueryInfo{..} = info in case value of
+    (DataNull             _) -> pure Nothing
+    (DataFloat (CFloat   v)) -> pure . Just $ v
+    _ -> singleError' name
 
--- todo: redo all of this
-instance FromDataField Scientific where
-  fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
-    where
-      go _ _ (DataNull          _) = pure Nothing
-      go _ _ (DataDouble        v) = pure . Just $ realToFrac v
-      go _ _ (DataInt           v) = pure . Just $ realToFrac v
-      go _ _ (DataUint          v) = pure . Just $ realToFrac v
-      go _ _ (DataFloat         v) = pure . Just $ realToFrac v
-      go _ _ (DataBytes Data_Bytes{..}) = (Just . read . BC.unpack) <$> tsLen bytes
-      go n _ _                     = singleError' n
-
+-- all these time related functions are suspect
 instance FromDataField UTCTime where
   fromDataField DataField{..} =
     let Data_QueryInfo{..} = info
@@ -117,6 +112,7 @@ instance FromDataField UTCTime where
       (DataTimestamp     v,  OracleTypeTimestampTz) -> pure . Just $ toUTCTime  v
       _                        -> singleError' name
 
+-- all these time related functions are suspect
 instance FromDataField ZonedTime where
   fromDataField DataField{..} =
     let Data_QueryInfo{..} = info
@@ -128,18 +124,11 @@ instance FromDataField ZonedTime where
       (DataTimestamp     v,  OracleTypeTimestampTz) -> pure . Just $ toZonedTime False v
       _                        -> singleError' name
 
+-- all these time related functions are suspect
 instance FromDataField LocalTime where
   fromDataField = fmap (fmap go) . fromDataField
     where
       go ZonedTime{..} = zonedTimeToLocalTime
-
-instance FromDataField DiffTime where
-  fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
-    where
-      go _ _ (DataNull          _) = return Nothing
-      go _ _ (DataIntervalDs    v) = return . Just $ toDiffTime  v
-      go _ _ (DataIntervalYm    v) = return . Just $ toDiffTime' v
-      go n _ _                     = singleError' n
 
 -- | Some types can convert to 'DataValue'
 class ToDataField a where
@@ -158,14 +147,16 @@ instance ToDataField Word64 where
   toDataField = pure . DataUint . fromIntegral
 
 instance ToDataField Double where
-  toDataField = pure . DataDouble . realToFrac --todo: is this right? should't it just be coerce?
+  toDataField = pure . DataDouble . CDouble
 
 instance ToDataField Float where
-  toDataField = pure . DataFloat . realToFrac --todo: is this right? should't it just be coerce?
+  toDataField = pure . DataFloat . CFloat
 
+-- all these time related functions are suspect
 instance ToDataField UTCTime where
   toDataField = pure . DataTimestamp . fromUTCTime
 
+-- all these time related functions are suspect
 instance ToDataField ZonedTime where
   toDataField = pure . DataTimestamp . fromZonedTime
 
@@ -192,10 +183,6 @@ pico = (10 :: Integer) ^ (12 :: Integer)
 {-# INLINE toDiffTime #-}
 toDiffTime :: Data_IntervalDS -> DiffTime
 toDiffTime Data_IntervalDS{..} = picosecondsToDiffTime $ toInteger fseconds + pico * (toInteger seconds + 60 * (toInteger minutes + 60 * (toInteger hours + 24 * toInteger days)))
-
-{-# INLINE toDiffTime' #-}
-toDiffTime' :: Data_IntervalYM -> DiffTime
-toDiffTime' Data_IntervalYM{..} = secondsToDiffTime $ 30 * 86400 * pico * (toInteger years * 12 + toInteger months)
 
 {-# INLINE fromUTCTime #-}
 fromUTCTime :: UTCTime -> Data_Timestamp
