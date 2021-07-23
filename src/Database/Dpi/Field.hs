@@ -39,9 +39,6 @@ data DataField = DataField
   , value :: !DataValue      -- ^ Raw Value
   } deriving (Show)
 
--- | Some Type can convert from 'DataField'
-class FromDataField a where
-  fromDataField  :: DataField -> IO (Maybe a)
 
 -- | Check if data field is nullable
 {-# INLINE isNullable #-}
@@ -64,6 +61,17 @@ readDataField dfm name = case lookup name dfm of
   Nothing -> return Nothing
   Just v  -> fromDataField v
 
+-- | Some types can convert from 'DataField'
+class FromDataField a where
+  fromDataField  :: DataField -> IO (Maybe a) --todo: should this be Either?
+
+instance FromDataField Bool where
+  fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
+    where
+      go _ _ (DataNull          _) = pure Nothing
+      go _ _ (DataBoolean       v) = pure $ Just v
+      go n _ _                     = singleError' n
+
 instance FromDataField ByteString where
   fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
     where
@@ -74,13 +82,7 @@ instance FromDataField ByteString where
 instance FromDataField Integer where
   fromDataField = fmap (fmap (round :: Scientific -> Integer)) . fromDataField
 
-instance FromDataField Int where
-  fromDataField = fmap (fmap fromInteger) . fromDataField
-
 instance FromDataField Int64 where
-  fromDataField = fmap (fmap fromInteger) . fromDataField
-
-instance FromDataField Word where
   fromDataField = fmap (fmap fromInteger) . fromDataField
 
 instance FromDataField Word64 where
@@ -92,6 +94,7 @@ instance FromDataField Double where
 instance FromDataField Float where
   fromDataField = fmap (fmap (realToFrac :: Scientific -> Float)) . fromDataField
 
+-- todo: redo all of this
 instance FromDataField Scientific where
   fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
     where
@@ -101,13 +104,6 @@ instance FromDataField Scientific where
       go _ _ (DataUint          v) = pure . Just $ realToFrac v
       go _ _ (DataFloat         v) = pure . Just $ realToFrac v
       go _ _ (DataBytes Data_Bytes{..}) = (Just . read . BC.unpack) <$> tsLen bytes
-      go n _ _                     = singleError' n
-
-instance FromDataField Bool where
-  fromDataField DataField{..} = let Data_QueryInfo{..} = info in go name typeInfo value
-    where
-      go _ _ (DataNull          _) = pure Nothing
-      go _ _ (DataBoolean       v) = pure $ Just v
       go n _ _                     = singleError' n
 
 instance FromDataField UTCTime where
@@ -145,80 +141,33 @@ instance FromDataField DiffTime where
       go _ _ (DataIntervalYm    v) = return . Just $ toDiffTime' v
       go n _ _                     = singleError' n
 
--- | Some type can convert to 'DataValue'
+-- | Some types can convert to 'DataValue'
 class ToDataField a where
-  toDataField :: a -> NativeTypeNum -> OracleTypeNum -> IO DataValue
+  toDataField :: a -> IO DataValue
 
 instance ToDataField ByteString where
-  toDataField v NativeTypeBytes OracleTypeChar        = fmap DataBytes $ fromByteString v
-  toDataField v NativeTypeBytes OracleTypeLongRaw     = fmap DataBytes $ fromByteString v
-  toDataField v NativeTypeBytes OracleTypeLongVarchar = fmap DataBytes $ fromByteString v
-  toDataField v NativeTypeBytes OracleTypeNchar       = fmap DataBytes $ fromByteString v
-  toDataField v NativeTypeBytes OracleTypeNumber      = fmap DataBytes $ fromByteString v
-  toDataField v NativeTypeBytes OracleTypeNvarchar    = fmap DataBytes $ fromByteString v
-  toDataField v NativeTypeBytes OracleTypeRaw         = fmap DataBytes $ fromByteString v
-  toDataField v NativeTypeBytes OracleTypeVarchar     = fmap DataBytes $ fromByteString v
-  toDataField _ _               _                     = singleError     "Text"
+  toDataField = fmap DataBytes . fromByteString
 
 instance ToDataField Bool where
-  toDataField v NativeTypeBoolean OracleTypeBoolean = return $ DataBoolean v
-  toDataField _ _                 _                 = singleError "Bool"
-
-instance ToDataField Integer where
-  toDataField v NativeTypeDouble OracleTypeNativeDouble = pure   $ DataDouble    $ realToFrac v
-  toDataField v NativeTypeDouble OracleTypeNumber       = pure   $ DataDouble    $ realToFrac v
-  toDataField v NativeTypeFloat  OracleTypeNativeFloat  = pure   $ DataFloat     $ realToFrac v
-  toDataField v NativeTypeInt64  OracleTypeNativeInt    = pure   $ DataInt       $ fromIntegral v
-  toDataField v NativeTypeInt64  OracleTypeNumber       = pure   $ DataInt       $ fromIntegral v
-  toDataField v NativeTypeUint64 OracleTypeNativeUint   = pure   $ DataUint      $ fromIntegral v
-  toDataField v NativeTypeUint64 OracleTypeNumber       = pure   $ DataUint   $ fromIntegral v
-  toDataField _ _                 _                     = singleError "Integer"
-
-instance ToDataField Int where
-  toDataField v = toDataField (toInteger v)
+  toDataField = pure . DataBoolean
 
 instance ToDataField Int64 where
-  toDataField v = toDataField (toInteger v)
-
-instance ToDataField Word where
-  toDataField v = toDataField (toInteger v)
+  toDataField = pure . DataInt . fromIntegral
 
 instance ToDataField Word64 where
-  toDataField v = toDataField (toInteger v)
-
-instance ToDataField Scientific where
-  toDataField v NativeTypeDouble OracleTypeNativeDouble = pure $ DataDouble $ realToFrac v
-  toDataField v NativeTypeDouble OracleTypeNumber       = pure $ DataDouble $ realToFrac v
-  toDataField v NativeTypeFloat  OracleTypeNativeFloat  = pure $ DataFloat  $ realToFrac v
-  toDataField _ _                 _                     = singleError "Decimal"
+  toDataField = pure . DataUint . fromIntegral
 
 instance ToDataField Double where
-  toDataField v NativeTypeDouble OracleTypeNativeDouble = pure $ DataDouble $ realToFrac v
-  toDataField v NativeTypeDouble OracleTypeNumber       = pure $ DataDouble $ realToFrac v
-  toDataField v NativeTypeFloat  OracleTypeNativeFloat  = pure $ DataFloat  $ realToFrac v
-  toDataField _ _                 _                     = singleError "Double"
+  toDataField = pure . DataDouble . realToFrac --todo: is this right? should't it just be coerce?
 
 instance ToDataField Float where
-  toDataField v = toDataField (realToFrac v :: Double)
+  toDataField = pure . DataFloat . realToFrac --todo: is this right? should't it just be coerce?
 
 instance ToDataField UTCTime where
-  toDataField v NativeTypeTimestamp OracleTypeDate         = pure $ DataTimestamp $ fromUTCTime  v
-  toDataField v NativeTypeTimestamp OracleTypeTimestamp    = pure $ DataTimestamp $ fromUTCTime  v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = pure $ DataTimestamp $ fromUTCTime  v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = pure $ DataTimestamp $ fromUTCTime  v
-  toDataField _ _                 _                        = singleError "UTCTime"
+  toDataField = pure . DataTimestamp . fromUTCTime
 
 instance ToDataField ZonedTime where
-  toDataField v NativeTypeTimestamp OracleTypeDate         = pure $ DataTimestamp $ fromZonedTime v
-  toDataField v NativeTypeTimestamp OracleTypeTimestamp    = pure $ DataTimestamp $ fromZonedTime v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampLtz = pure $ DataTimestamp $ fromZonedTime v
-  toDataField v NativeTypeTimestamp OracleTypeTimestampTz  = pure $ DataTimestamp $ fromZonedTime v
-  toDataField _ _                 _                        = singleError "ZonedTime"
-
-instance ToDataField DiffTime where
-  toDataField v NativeTypeIntervalDs OracleTypeIntervalDs = pure $ DataIntervalDs $ fromDiffTime  v
-  toDataField v NativeTypeIntervalYm OracleTypeIntervalYm = pure $ DataIntervalYm $ fromDiffTime' v
-  toDataField _ _                 _                       = singleError "DiffTime"
+  toDataField = pure . DataTimestamp . fromZonedTime
 
 fromByteString :: ByteString -> IO Data_Bytes
 fromByteString bs = B.unsafeUseAsCStringLen bs $ \bytes -> let encoding ="utf-8" in return Data_Bytes{..}
@@ -239,13 +188,6 @@ fromDiffTime dt =
 
 pico :: Integer
 pico = (10 :: Integer) ^ (12 :: Integer)
-
-{-# INLINE fromDiffTime' #-}
-fromDiffTime' :: DiffTime -> Data_IntervalYM
-fromDiffTime' dt =
-  let dts   = diffTimeToPicoseconds dt `div` (30 * 86400 * pico)
-      (y,m) = dts `divMod` 12
-  in Data_IntervalYM (fromInteger y) (fromInteger m)
 
 {-# INLINE toDiffTime #-}
 toDiffTime :: Data_IntervalDS -> DiffTime
