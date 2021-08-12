@@ -42,8 +42,7 @@ type SqlParam = (Name, IO DataValue)
 
 -- | Execute SQL
 execute :: PtrConn -> SQL -> [SqlParam] -> IO Int
-execute conn sql ps = do
-  st <- prepareStatement conn False sql
+execute conn sql ps = withStatement conn False sql $ \st -> do
   bindValue st ps
   _  <- executeStatement st ModeExecDefault
   fromIntegral <$> getRowCount st
@@ -60,19 +59,32 @@ queryAsRes conn sql ps = do
   let {-# INLINE pst #-}
       pst = do
         st <- prepareStatement conn False sql
+        qid <- getSubscrQueryId st
+        print "qid before"
+        print qid
         bindValue st ps
+        print "st"
+        print st
         r  <- executeStatement st ModeExecDefault
+        qid' <- getSubscrQueryId st
+        print "qid after"
+        print qid'
         is <- mapM (go st) [1..r]
         return (st,(is,r))
       go st'@(cxt,_) ind = do
         info'@Data_QueryInfo{..} <- getQueryInfo st' ind
         let Data_DataTypeInfo{..} = typeInfo
         if oracleTypeNum /= OracleTypeNumber && defaultNativeTypeNum /= NativeTypeBytes
-          then return info'
+          then do
+            void $ putStrLn "were are on the sane path"
+            return info'
           else do
+            void $ putStrLn "were are here baby"
             _ <- defineValue st' ind oracleTypeNum NativeTypeBytes (fromIntegral dbSizeInBytes) True (cxt,objectType)
             getQueryInfo st' ind
-  (st,(is,r)) <- mkAcquire pst (void . releaseStatement . fst)
+  (st,(is,r)) <- mkAcquire pst (\x -> do
+                                   void (putStrLn "XXXXXXXXXXXXX@!#$@!#$@#$%@#$XXXXXX")
+                                   void . releaseStatement . fst $ x)
   let {-# INLINE pull #-}
       pull = do
         mayC <- liftIO $ fetch st
